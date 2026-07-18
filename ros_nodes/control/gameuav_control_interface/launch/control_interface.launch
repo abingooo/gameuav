@@ -1,0 +1,37 @@
+<launch>
+  <arg name="odom_topic" default="/vins_fusion/imu_propagate"/>
+  <arg name="ego_position_cmd_topic" default="/control/ego_position_cmd"/>
+  <arg name="output_position_cmd_topic" default="/control/position_cmd"/>
+  <arg name="direct_position_topic" default="/control/position"/>
+  <arg name="spf_position_topic" default="/control/spf_position"/>
+  <arg name="speed_topic" default="/control/speed"/>
+  <arg name="ego_position_topic" default="/control/ego_position"/>
+  <arg name="stop_topic" default="/control/stop"/>
+  <arg name="planning_goal_topic" default="/planning/goal"/>
+  <arg name="planning_yaw_topic" default="/planning/goal_yaw_deg"/>
+  <arg name="rate_hz" default="50.0"/>
+  <arg name="spf_position_timeout" default="0.0"/>
+  <arg name="max_speed" default="1.0"/>
+  <arg name="max_vertical_speed" default="0.5"/>
+  <arg name="min_z" default="0.05"/>
+  <arg name="max_z" default="3.0"/>
+
+  <node pkg="gameuav_control_interface" type="control_interface_node.py" name="gameuav_control_interface" output="screen">
+    <param name="odom_topic" value="$(arg odom_topic)"/>
+    <param name="ego_position_cmd_topic" value="$(arg ego_position_cmd_topic)"/>
+    <param name="output_position_cmd_topic" value="$(arg output_position_cmd_topic)"/>
+    <param name="direct_position_topic" value="$(arg direct_position_topic)"/>
+    <param name="spf_position_topic" value="$(arg spf_position_topic)"/>
+    <param name="speed_topic" value="$(arg speed_topic)"/>
+    <param name="ego_position_topic" value="$(arg ego_position_topic)"/>
+    <param name="stop_topic" value="$(arg stop_topic)"/>
+    <param name="planning_goal_topic" value="$(arg planning_goal_topic)"/>
+    <param name="planning_yaw_topic" value="$(arg planning_yaw_topic)"/>
+    <param name="rate_hz" value="$(arg rate_hz)"/>
+    <param name="spf_position_timeout" value="$(arg spf_position_timeout)"/>
+    <param name="max_speed" value="$(arg max_speed)"/>
+    <param name="max_vertical_speed" value="$(arg max_vertical_speed)"/>
+    <param name="min_z" value="$(arg min_z)"/>
+    <param name="max_z" value="$(arg max_z)"/>
+  </node>
+</launch>

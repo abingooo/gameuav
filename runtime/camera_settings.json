@@ -1,0 +1,26 @@
+{
+  "cameras": {
+    "depth": {
+      "enabled": false,
+      "mode": "video",
+      "quality": 45
+    },
+    "gray": {
+      "enabled": false,
+      "mode": "video",
+      "quality": 85
+    },
+    "rgb": {
+      "enabled": true,
+      "mode": "video",
+      "quality": 85
+    },
+    "rgb1": {
+      "enabled": true,
+      "mode": "video",
+      "quality": 85
+    }
+  },
+  "saved_at": 1783985479.3081393,
+  "version": 1
+}

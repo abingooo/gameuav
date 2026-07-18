@@ -1,0 +1,56 @@
+flowchart LR
+  subgraph Ground["External ground station 20.0.0.172"]
+    GCS["Web GCS\nhttp://20.0.0.172:8000"]
+    Operator["Operator / browser"]
+    Operator --> GCS
+  end
+
+  subgraph UAV["UAV onboard computer 20.0.0.187"]
+    Agent["gameuav-agent\nTCP 8765"]
+    NetGW["net_to_ros_gateway\nTCP 9100"]
+    CamGW["camera_stream_gateway\nHTTP MJPEG 9200"]
+    ROS["ROS master + topics"]
+
+    subgraph Perception["Perception"]
+      RS["RealSense D435\nrealsense2_camera"]
+      RGB1["RGB1 USB camera"]
+    end
+
+    subgraph Estimation["State estimation"]
+      MAVROS["MAVROS\nPX4 bridge"]
+      VINS["VINS-Fusion\n/vins_fusion/imu_propagate"]
+    end
+
+    subgraph Planning["Planning / mission"]
+      Ego["EGO-Planner\n/position_cmd"]
+      SPF["See-Point-Fly bridge\noptional"]
+      SPFWorker["SPF worker\nTCP 9310 optional"]
+    end
+
+    subgraph Control["Control / actuation"]
+      PX4Ctrl["px4ctrl\nVINS-only attitude/thrust control"]
+      PX4["PX4 FMU\nserial FCU"]
+      Tiplight["tiplight\noptional"]
+    end
+  end
+
+  GCS -- "module control / health" --> Agent
+  GCS -- "ROS commands" --> NetGW
+  GCS -- "camera MJPEG" --> CamGW
+
+  Agent -- "start/stop whitelisted modules" --> ROS
+  NetGW -- "publish commands / sample state" --> ROS
+  ROS -- "camera topics" --> CamGW
+
+  RS -- "infra/depth/color" --> VINS
+  RGB1 -- "/rgb1/image_raw" --> CamGW
+  MAVROS -- "/mavros/imu/data" --> VINS
+  VINS -- "odometry" --> PX4Ctrl
+  VINS -- "odometry" --> Ego
+  Ego -- "/position_cmd" --> PX4Ctrl
+  SPF --> Ego
+  SPFWorker --> SPF
+  PX4Ctrl -- "/mavros/setpoint_raw/attitude" --> MAVROS
+  MAVROS <--> PX4
+  Tiplight -. "LED serial" .-> Control
+

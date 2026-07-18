@@ -1,0 +1,14 @@
+[project]
+name = "gameuav"
+version = "0.1.0"
+description = "GameUAV multi-UAV ROS system Python environment"
+requires-python = ">=3.8,<3.9"
+dependencies = [
+  "fastapi>=0.110,<0.116",
+  "httpx>=0.27,<0.29",
+  "pyserial==3.5",
+  "uvicorn[standard]>=0.27,<0.36",
+]
+
+[tool.uv]
+package = false

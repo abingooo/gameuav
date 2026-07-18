@@ -1,0 +1,42 @@
+<launch>
+  <arg name="fcu_url" default="/dev/serial/by-id/usb-Auterion_PX4_FMU_v6C.x_0-if00:57600"/>
+  <arg name="gcs_url" default=""/>
+  <arg name="tgt_system" default="1"/>
+  <arg name="tgt_component" default="1"/>
+  <arg name="log_output" default="screen"/>
+  <arg name="fcu_protocol" default="v2.0"/>
+  <arg name="respawn_mavros" default="false"/>
+  <arg name="mavros_respawn_delay" default="1.0"/>
+  <arg name="configure_stream_rates" default="true"/>
+  <arg name="stream_rate_config" default="$(find px4ctrl)/config/mavlink_stream_rates.yaml"/>
+  <arg name="mavros_ns" default="mavros"/>
+
+  <node pkg="mavros"
+        type="mavros_node"
+        name="mavros"
+        required="$(eval not respawn_mavros)"
+        clear_params="true"
+        output="$(arg log_output)"
+        respawn="$(arg respawn_mavros)"
+        respawn_delay="$(arg mavros_respawn_delay)">
+    <param name="fcu_url" value="$(arg fcu_url)"/>
+    <param name="gcs_url" value="$(arg gcs_url)"/>
+    <param name="target_system_id" value="$(arg tgt_system)"/>
+    <param name="target_component_id" value="$(arg tgt_component)"/>
+    <param name="fcu_protocol" value="$(arg fcu_protocol)"/>
+
+    <rosparam command="load" file="$(find mavros)/launch/px4_pluginlists.yaml"/>
+    <rosparam command="load" file="$(find mavros)/launch/px4_config.yaml"/>
+  </node>
+
+  <group if="$(arg configure_stream_rates)">
+    <node pkg="px4ctrl"
+          type="configure_mavlink_streams.py"
+          name="configure_mavlink_streams"
+          output="$(arg log_output)"
+          required="false">
+      <param name="mavros_ns" value="$(arg mavros_ns)"/>
+      <rosparam command="load" file="$(arg stream_rate_config)"/>
+    </node>
+  </group>
+</launch>

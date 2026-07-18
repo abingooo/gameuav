@@ -1,0 +1,20 @@
+[Unit]
+Description=GameUAV camera stream gateway
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=uav
+Group=uav
+WorkingDirectory=/home/uav/Desktop/uav_project/gameuav
+EnvironmentFile=/etc/gameuav/camera-stream-gateway.env
+Environment=PYTHONPATH=/home/uav/Desktop/uav_project/gameuav:/usr/lib/python3/dist-packages
+ExecStart=/bin/bash -lc 'source /opt/ros/noetic/setup.bash && source "${GAMEUAV_WORKSPACE}/devel/setup.bash" && exec /home/uav/.local/bin/uv run python -m gateway.camera_stream_gateway.node --host "${GAMEUAV_CAMERA_GATEWAY_HOST}" --port "${GAMEUAV_CAMERA_GATEWAY_PORT}" --workspace-root "${GAMEUAV_WORKSPACE}"'
+Restart=always
+RestartSec=2
+KillSignal=SIGINT
+TimeoutStopSec=10
+
+[Install]
+WantedBy=multi-user.target

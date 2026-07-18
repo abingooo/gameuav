@@ -1,0 +1,17 @@
+You are given a drone natural-language control instruction: "{instruction}" and an image.
+
+Your task: output exactly ONE word only (no punctuation, no extra text) that is the instruction type.
+
+The output must be one of these four words:
+control
+navigate
+follow
+search
+
+Decision rules:
+1) If the instruction does NOT mention a specific target object that could be localized in an image -> control
+2) If the instruction mentions a specific target object:
+   - If the target object is visible in the image:
+     - If it requires continuous tracking/following/keeping distance/keeping in view -> follow
+     - If it requires go-to/approach/reach/land/aim once/short non-continuous action -> navigate
+   - If the target object is NOT visible in the image -> search

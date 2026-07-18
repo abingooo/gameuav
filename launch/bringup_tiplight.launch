@@ -1,0 +1,13 @@
+<launch>
+  <arg name="port" default="auto"/>
+  <arg name="baud" default="115200"/>
+  <arg name="command_topic" default="/actuation/tiplight_cmd"/>
+  <arg name="status_topic" default="/status/tiplight"/>
+
+  <include file="$(find tiplight)/launch/tiplight_serial.launch">
+    <arg name="port" value="$(arg port)"/>
+    <arg name="baud" value="$(arg baud)"/>
+    <arg name="command_topic" value="$(arg command_topic)"/>
+    <arg name="status_topic" value="$(arg status_topic)"/>
+  </include>
+</launch>

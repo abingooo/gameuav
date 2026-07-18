@@ -1,0 +1,124 @@
+<launch>
+    <remap from="/tf" to="tf"/>
+    <remap from="/tf_static" to="tf_static"/>
+
+    <!-- obj_num: 场景中的运动障碍物数量，供动态预测模块使用 -->
+    <arg name="obj_num" default="10" />
+    <!-- drone_id: EGO Planner 内部轨迹编号；单机默认 0，跨机器身份不放 ROS topic 前缀 -->
+    <arg name="drone_id" default="0"/>
+
+    <!-- map_size_x: 地图在 X 轴方向的范围（米），传入栅格地图 -->
+    <arg name="map_size_x" default="100"/>
+    <!-- map_size_y: 地图在 Y 轴方向的范围（米） -->
+    <arg name="map_size_y" default="50"/>
+    <!-- map_size_z: 地图在 Z 轴方向的范围（米，高度） -->
+    <arg name="map_size_z" default="3.0"/>
+    <!-- odom_topic: 规划使用的里程计话题，来自 vins_fusion -->
+    <arg name="odom_topic" default="/vins_fusion/imu_propagate"/>
+
+    <!-- EGO internal topics: keep original drone_0 style for planner compatibility; not gateway-facing public interfaces -->
+    <arg name="bspline_topic" default="drone_$(arg drone_id)_planning/bspline"/>
+    <arg name="data_display_topic" default="drone_$(arg drone_id)_planning/data_display"/>
+    <arg name="broadcast_bspline_topic" default="broadcast_bspline"/>
+    <arg name="swarm_trajs_topic" default="/drone_$(arg drone_id)_planning/swarm_trajs"/>
+
+    <!-- main algorithm params 主算法参数 -->
+    <include file="$(find ego_planner)/launch/advanced_param_exp.xml">
+        <!-- drone_id: 传给 ego_planner 的内部轨迹编号，保留以兼容原始 planner -->
+        <arg name="drone_id" value="$(arg drone_id)"/>
+        <!-- map_size_x_: ego_planner 使用的 X 方向地图范围 -->
+        <arg name="map_size_x_" value="$(arg map_size_x)"/>
+        <!-- map_size_y_: ego_planner 使用的 Y 方向地图范围 -->
+        <arg name="map_size_y_" value="$(arg map_size_y)"/>
+        <!-- map_size_z_: ego_planner 使用的 Z 方向地图范围 -->
+        <arg name="map_size_z_" value="$(arg map_size_z)"/>
+        <!-- odometry_topic: 规划/地图输入的里程计话题 -->
+        <arg name="odometry_topic" value="$(arg odom_topic)"/>
+        <arg name="bspline_topic" value="$(arg bspline_topic)"/>
+        <arg name="data_display_topic" value="$(arg data_display_topic)"/>
+        <arg name="broadcast_bspline_topic" value="$(arg broadcast_bspline_topic)"/>
+        <arg name="swarm_trajs_topic" value="$(arg swarm_trajs_topic)"/>
+        <!-- obj_num_set: 预测模块使用的动态障碍物数量 -->
+        <arg name="obj_num_set" value="$(arg obj_num)" />
+        <!-- camera_pose_topic: 相机在世界系下的位姿话题（未使用则填占位） -->
+        <arg name="camera_pose_topic" value="nouse1"/>
+        <!-- depth_topic: 深度图话题，默认 640x480 -->
+        <arg name="depth_topic" value="/camera/depth/image_rect_raw"/>
+        <!-- cloud_topic: 激光或其他点云输入话题（若使用则不需深度图） -->
+        <arg name="cloud_topic" value="nouse2"/>
+        <!-- cx: 深度相机主点 x 像素坐标 -->
+        <arg name="cx" value="317.944484051631"/>
+        <!-- cy: 深度相机主点 y 像素坐标 -->
+        <arg name="cy" value="231.71115593384292"/>
+        <!-- fx: 深度相机 x 方向焦距 -->
+        <arg name="fx" value="383.19929174573906"/>
+        <!-- fy: 深度相机 y 方向焦距 -->
+        <arg name="fy" value="384.76715878730715"/>
+        <!-- max_vel: 规划允许的最大速度（米/秒，推荐 0.5~2.0） -->
+        <arg name="max_vel" value="0.5" />  <!-- 0.5 to 2.0 -->
+        <!-- max_acc: 规划允许的最大加速度（米/秒^2） -->
+        <arg name="max_acc" value="3.0" />
+        <!-- planning_horizon: 规划前视距离，应大于传感范围 1.5 倍 -->
+        <arg name="planning_horizon" value="6" />
+        <!-- use_distinctive_trajs: 是否启用多样化轨迹以提升避障鲁棒性 -->
+        <arg name="use_distinctive_trajs" value="false" />
+        <!-- flight_type: 1=RViz Nav Goal，2=使用下方全局航点，4=langguide 航点 -->
+        <arg name="flight_type" value="4" />
+        <!-- point_num: 全局航点数量，用于生成分段 min-snap 轨迹 -->
+        <arg name="point_num" value="2" />
+        <!-- 示例航点（默认注释，可按需启用覆盖默认航点） -->
+        <!-- <arg name="point0_x" value="8.0" />
+        <arg name="point0_y" value="-4.67" />
+        <arg name="point0_z" value="0.7" />
+        <arg name="point1_x" value="4.9" />
+        <arg name="point1_y" value="1.9" />
+        <arg name="point1_z" value="0.7" />
+        <arg name="point2_x" value="1.5" />
+        <arg name="point2_y" value="-4.8" />
+        <arg name="point2_z" value="0.7" />
+        <arg name="point3_x" value="8.3" />
+        <arg name="point3_y" value="1.14" />
+        <arg name="point3_z" value="0.7" />
+        <arg name="point4_x" value="1.0" />
+        <arg name="point4_y" value="-2.66" />
+        <arg name="point4_z" value="0.4" /> -->
+        <!-- point0_x: 第 0 个航点的世界系 X 坐标 -->
+        <arg name="point0_x" value="1.0" />
+        <!-- point0_y: 第 0 个航点的世界系 Y 坐标 -->
+        <arg name="point0_y" value="0.0" />
+        <!-- point0_z: 第 0 个航点的世界系 Z 坐标 -->
+        <arg name="point0_z" value="0.5" />
+        <!-- point1_x: 第 1 个航点的世界系 X 坐标 -->
+        <arg name="point1_x" value="3.0" />
+        <!-- point1_y: 第 1 个航点的世界系 Y 坐标 -->
+        <arg name="point1_y" value="2.0" />
+        <!-- point1_z: 第 1 个航点的世界系 Z 坐标 -->
+        <arg name="point1_z" value="0.5" />
+        <!-- point2_x: 第 2 个航点的世界系 X 坐标 -->
+        <arg name="point2_x" value="1.5" />
+        <!-- point2_y: 第 2 个航点的世界系 Y 坐标 -->
+        <arg name="point2_y" value="-4.8" />
+        <!-- point2_z: 第 2 个航点的世界系 Z 坐标 -->
+        <arg name="point2_z" value="0.7" />
+        <!-- point3_x: 第 3 个航点的世界系 X 坐标 -->
+        <arg name="point3_x" value="8.3" />
+        <!-- point3_y: 第 3 个航点的世界系 Y 坐标 -->
+        <arg name="point3_y" value="1.14" />
+        <!-- point3_z: 第 3 个航点的世界系 Z 坐标 -->
+        <arg name="point3_z" value="0.7" />
+        <!-- point4_x: 第 4 个航点的世界系 X 坐标 -->
+        <arg name="point4_x" value="1.0" />
+        <!-- point4_y: 第 4 个航点的世界系 Y 坐标 -->
+        <arg name="point4_y" value="-2.66" />
+        <!-- point4_z: 第 4 个航点的世界系 Z 坐标 -->
+        <arg name="point4_z" value="0.4" />
+        
+    </include>
+    <!-- trajectory server 轨迹发布器节点 -->
+    <node pkg="ego_planner" name="drone_$(arg drone_id)_traj_server" type="traj_server" output="screen">
+        <!-- EGO internal B-spline topic. External control output is /position_cmd. -->
+        <remap from="~planning/bspline" to="$(arg bspline_topic)"/>
+        <!-- traj_server/time_forward: 发布预测点的前视时间 -->
+        <param name="traj_server/time_forward" value="1.0" type="double"/>
+    </node>
+</launch>

@@ -1,0 +1,32 @@
+worker:
+  url: "http://127.0.0.1:9310/infer"
+  timeout_sec: 30.0
+
+topics:
+  image: "/rgb1/image_raw"
+  odom: "/vins_fusion/imu_propagate"
+  command: "/spf/user_command"
+  enable: "/spf/enable"
+  goal: "/control/spf_position"
+  status: "/spf/status"
+
+safety:
+  manual_enable_required: true
+  max_step_xy: 1.5
+  max_step_z: 0.3
+  min_goal_distance_xy: 0.8
+  min_z: 0.4
+  max_z: 1.5
+  rate_limit_sec: 2.0
+  image_timeout_sec: 2.0
+  odom_timeout_sec: 1.0
+  frame_id: "world"
+
+frame_convention:
+  # Worker action convention:
+  # dx: camera/body right, meters
+  # dy: camera/body forward, meters
+  # dz: up, meters
+  action_dx_axis: "right"
+  action_dy_axis: "forward"
+  action_dz_axis: "up"

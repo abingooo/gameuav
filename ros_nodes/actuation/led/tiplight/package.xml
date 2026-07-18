@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>tiplight</name>
+  <version>0.1.0</version>
+  <description>ROS node for controlling an ESP32 tip light over serial.</description>
+
+  <maintainer email="uav@todo.todo">uav</maintainer>
+  <license>TODO</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <exec_depend>rospy</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+  <exec_depend>python3-serial</exec_depend>
+
+  <export />
+</package>

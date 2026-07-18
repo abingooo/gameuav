@@ -1,0 +1,3 @@
+<launch>
+  <node name="gameuav_ego_map_rviz" pkg="rviz" type="rviz" args="-d $(find ego_planner)/launch/gameuav_ego_map.rviz" required="true" />
+</launch>

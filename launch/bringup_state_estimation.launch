@@ -1,0 +1,31 @@
+<launch>
+  <arg name="fcu_url" default="/dev/serial/by-id/usb-Auterion_PX4_FMU_v6C.x_0-if00:57600"/>
+  <arg name="camera" default="camera"/>
+  <arg name="camera_serial_no" default=""/>
+  <arg name="camera_usb_port_id" default=""/>
+  <arg name="start_mavros" default="true"/>
+  <arg name="start_realsense" default="true"/>
+  <arg name="start_vins" default="true"/>
+  <arg name="enable_realsense_color" default="true"/>
+  <arg name="configure_mavros_stream_rates" default="true"/>
+
+  <group if="$(arg start_mavros)">
+    <include file="$(dirname)/bringup_mavros.launch">
+      <arg name="fcu_url" value="$(arg fcu_url)"/>
+      <arg name="configure_stream_rates" value="$(arg configure_mavros_stream_rates)"/>
+    </include>
+  </group>
+
+  <group if="$(arg start_realsense)">
+    <include file="$(dirname)/bringup_realsense.launch">
+      <arg name="camera" value="$(arg camera)"/>
+      <arg name="serial_no" value="$(arg camera_serial_no)"/>
+      <arg name="usb_port_id" value="$(arg camera_usb_port_id)"/>
+      <arg name="enable_color" value="$(arg enable_realsense_color)"/>
+    </include>
+  </group>
+
+  <group if="$(arg start_vins)">
+    <include file="$(dirname)/bringup_vins.launch"/>
+  </group>
+</launch>

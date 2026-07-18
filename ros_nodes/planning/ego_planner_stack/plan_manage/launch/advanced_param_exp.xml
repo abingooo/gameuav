@@ -1,0 +1,188 @@
+<launch>
+  <remap from="/tf" to="tf"/>
+  <remap from="/tf_static" to="tf_static"/>
+
+  <!-- map_size_x_: 栅格地图 X 方向尺寸（米） -->
+  <arg name="map_size_x_"/>
+  <!-- map_size_y_: 栅格地图 Y 方向尺寸（米） -->
+  <arg name="map_size_y_"/>
+  <!-- map_size_z_: 栅格地图 Z 方向尺寸（米，高度） -->
+  <arg name="map_size_z_"/>
+
+  <!-- odometry_topic: 规划与地图使用的里程计话题 -->
+  <arg name="odometry_topic"/>
+  <!-- camera_pose_topic: 相机在世界系下的位姿话题 -->
+  <arg name="camera_pose_topic"/>
+  <!-- depth_topic: 深度图话题 -->
+  <arg name="depth_topic"/>
+  <!-- cloud_topic: 点云话题（激光等） -->
+  <arg name="cloud_topic"/>
+
+  <!-- cx/cy/fx/fy: 深度相机内参 -->
+  <arg name="cx"/>
+  <arg name="cy"/>
+  <arg name="fx"/>
+  <arg name="fy"/>
+
+  <!-- max_vel: 规划最大速度；max_acc: 最大加速度；planning_horizon: 规划前视距离 -->
+  <arg name="max_vel"/>
+  <arg name="max_acc"/>
+  <arg name="planning_horizon"/>
+
+  <!-- point_num 与 0~4 号航点坐标，用于全局轨迹生成 -->
+  <arg name="point_num"/>
+  <arg name="point0_x"/>
+  <arg name="point0_y"/>
+  <arg name="point0_z"/>
+  <arg name="point1_x"/>
+  <arg name="point1_y"/>
+  <arg name="point1_z"/>
+  <arg name="point2_x"/>
+  <arg name="point2_y"/>
+  <arg name="point2_z"/>
+  <arg name="point3_x"/>
+  <arg name="point3_y"/>
+  <arg name="point3_z"/>
+  <arg name="point4_x"/>
+  <arg name="point4_y"/>
+  <arg name="point4_z"/>
+
+  <!-- flight_type: 任务类型；use_distinctive_trajs: 是否启用多样轨迹 -->
+  <arg name="flight_type"/>
+  <arg name="use_distinctive_trajs"/>
+
+  <!-- obj_num_set: 预测模块中的动态障碍物数 -->
+  <arg name="obj_num_set"/>
+
+  <!-- drone_id: EGO Planner 内部轨迹编号；跨机器身份由 gateway 网络消息携带 -->
+  <arg name="drone_id"/>
+  <arg name="bspline_topic" default="drone_$(arg drone_id)_planning/bspline"/>
+  <arg name="data_display_topic" default="drone_$(arg drone_id)_planning/data_display"/>
+  <arg name="broadcast_bspline_topic" default="broadcast_bspline"/>
+  <arg name="swarm_trajs_topic" default="/drone_$(arg drone_id)_planning/swarm_trajs"/>
+
+
+  <!-- main node 主规划节点；drone_0 节点名保留以兼容 EGO 原始代码，不作为跨机器身份 -->
+  <!-- <node pkg="ego_planner" name="ego_planner_node" type="ego_planner_node" output="screen" launch-prefix="valgrind"> -->
+  <node pkg="ego_planner" name="drone_$(arg drone_id)_ego_planner_node" type="ego_planner_node" output="screen">
+  
+    <!-- 里程计使用本机 ROS 话题；drone_0_planning/... 为 EGO 内部接口 -->
+    <remap from="~odom_world" to="$(arg odometry_topic)"/>
+    <remap from="~planning/bspline" to="$(arg bspline_topic)"/>
+    <remap from="~planning/data_display" to="$(arg data_display_topic)"/>
+    <remap from="~planning/broadcast_bspline_from_planner" to="$(arg broadcast_bspline_topic)"/>
+    <remap from="~planning/broadcast_bspline_to_planner" to="$(arg broadcast_bspline_topic)"/>
+
+    <!-- 地图模块输入的里程计/点云/相机位姿/深度图重映射 -->
+    <remap from="~grid_map/odom" to="$(arg odometry_topic)"/>
+    <remap from="~grid_map/cloud" to="$(arg cloud_topic)"/>
+    <remap from="~grid_map/pose"   to = "$(arg camera_pose_topic)"/> 
+    <remap from="~grid_map/depth" to = "$(arg depth_topic)"/>
+    
+
+    <!-- planning fsm 飞行状态机参数 -->
+    <param name="fsm/flight_type" value="$(arg flight_type)" type="int"/> <!-- 1=RViz Nav Goal, 2=全局航点, 4=langguide -->
+    <param name="fsm/thresh_replan_time" value="0.5" type="double"/> <!-- 触发重规划的时间阈值 -->
+    <param name="fsm/thresh_no_replan_meter" value="0.5" type="double"/> <!-- 位移不足则不重规划的距离阈值 -->
+    <param name="fsm/planning_horizon" value="$(arg planning_horizon)" type="double"/> <!-- 规划前视距离，建议传感范围 1.5 倍 -->
+    <param name="fsm/planning_horizen_time" value="3" type="double"/> <!-- 规划前视时间窗口 -->
+    <param name="fsm/emergency_time" value="1.0" type="double"/> <!-- 紧急制动时间 -->
+    <param name="fsm/realworld_experiment" value="true"/> <!-- 实验模式开关 -->
+    <param name="fsm/fail_safe" value="true"/> <!-- 失败保护开关 -->
+    <param name="fsm/arrival_radius" value="0.5" type="double"/> <!-- 仅用于 PLAN_TARGET 单点控制的越点到达检测半径 -->
+    <param name="fsm/arrival_distance_increase" value="0.2" type="double"/> <!-- 相对最近距离累计远离 20 厘米后判定到达 -->
+    <param name="fsm/arrival_max_initial_goal_distance" value="2.0" type="double"/> <!-- 仅对初始距离不超过 2 米的单点目标启用 -->
+
+    <!-- 航点配置：数量与 0~4 号航点坐标 -->
+    <param name="fsm/waypoint_num" value="$(arg point_num)" type="int"/>
+    <param name="fsm/waypoint0_x" value="$(arg point0_x)" type="double"/>
+    <param name="fsm/waypoint0_y" value="$(arg point0_y)" type="double"/>
+    <param name="fsm/waypoint0_z" value="$(arg point0_z)" type="double"/>
+    <param name="fsm/waypoint1_x" value="$(arg point1_x)" type="double"/>
+    <param name="fsm/waypoint1_y" value="$(arg point1_y)" type="double"/>
+    <param name="fsm/waypoint1_z" value="$(arg point1_z)" type="double"/>
+    <param name="fsm/waypoint2_x" value="$(arg point2_x)" type="double"/>
+    <param name="fsm/waypoint2_y" value="$(arg point2_y)" type="double"/>
+    <param name="fsm/waypoint2_z" value="$(arg point2_z)" type="double"/>
+    <param name="fsm/waypoint3_x" value="$(arg point3_x)" type="double"/>
+    <param name="fsm/waypoint3_y" value="$(arg point3_y)" type="double"/>
+    <param name="fsm/waypoint3_z" value="$(arg point3_z)" type="double"/>
+    <param name="fsm/waypoint4_x" value="$(arg point4_x)" type="double"/>
+    <param name="fsm/waypoint4_y" value="$(arg point4_y)" type="double"/>
+    <param name="fsm/waypoint4_z" value="$(arg point4_z)" type="double"/>
+
+    <!-- grid_map 栅格地图配置 -->
+    <param name="grid_map/resolution"      value="0.15" /> <!-- 栅格分辨率（米） -->
+    <param name="grid_map/map_size_x"   value="$(arg map_size_x_)" /> <!-- 地图 X 范围 -->
+    <param name="grid_map/map_size_y"   value="$(arg map_size_y_)" /> <!-- 地图 Y 范围 -->
+    <param name="grid_map/map_size_z"   value="$(arg map_size_z_)" /> <!-- 地图 Z 范围 -->
+    <param name="grid_map/local_update_range_x"  value="5.5" /> <!-- 局部更新范围 X -->
+    <param name="grid_map/local_update_range_y"  value="5.5" /> <!-- 局部更新范围 Y -->
+    <param name="grid_map/local_update_range_z"  value="4.5" /> <!-- 局部更新范围 Z -->
+    <!-- <param name="grid_map/obstacles_inflation"     value="0.299" />  -->
+    <param name="grid_map/obstacles_inflation"     value="0.15" /> <!-- 膨胀半径（米） -->
+    <param name="grid_map/local_map_margin" value="10"/> <!-- 局部地图安全边界（栅格数） -->
+    <param name="grid_map/ground_height"        value="-0.01"/> <!-- 地面高度阈值 -->
+    <!-- camera parameter 相机内参传递给地图 -->
+    <param name="grid_map/cx" value="$(arg cx)"/>
+    <param name="grid_map/cy" value="$(arg cy)"/>
+    <param name="grid_map/fx" value="$(arg fx)"/>
+    <param name="grid_map/fy" value="$(arg fy)"/>
+    <!-- depth filter 深度滤波参数 -->
+    <param name="grid_map/use_depth_filter" value="true"/> <!-- 是否启用深度滤波 -->
+    <param name="grid_map/depth_filter_tolerance" value="0.15"/> <!-- 深度一致性容差 -->
+    <param name="grid_map/depth_filter_maxdist"   value="5.0"/> <!-- 深度最大有效距离 -->
+    <param name="grid_map/depth_filter_mindist"   value="0.2"/> <!-- 深度最小有效距离 -->
+    <param name="grid_map/depth_filter_margin"    value="2"/> <!-- 深度滤波边缘宽度（像素） -->
+    <param name="grid_map/k_depth_scaling_factor" value="1000.0"/> <!-- 深度值缩放因子 -->
+    <param name="grid_map/skip_pixel" value="2"/> <!-- 深度下采样步长 -->
+    <!-- local fusion 概率融合参数 -->
+    <param name="grid_map/p_hit"  value="0.65"/> <!-- 命中概率 -->
+    <param name="grid_map/p_miss" value="0.35"/> <!-- 未命中概率 -->
+    <param name="grid_map/p_min"  value="0.12"/> <!-- 概率下限 -->
+    <param name="grid_map/p_max"  value="0.90"/> <!-- 概率上限 -->
+    <param name="grid_map/p_occ"  value="0.80"/> <!-- 占据判定阈值 -->
+    <param name="grid_map/min_ray_length" value="0.3"/> <!-- 光线最小长度 -->
+    <param name="grid_map/max_ray_length" value="5.0"/> <!-- 光线最大长度 -->
+
+    <param name="grid_map/visualization_truncate_height"   value="1.8"/> <!-- 可视化截断高度 -->
+    <param name="grid_map/show_occ_time"  value="false"/> <!-- 是否显示占用时间 -->
+    <param name="grid_map/pose_type"     value="2"/>  <!-- 位姿类型选择 -->
+    <param name="grid_map/frame_id"      value="world"/> <!-- 地图坐标系 -->
+
+  <!-- planner manager 轨迹管理参数 -->
+    <param name="manager/max_vel" value="$(arg max_vel)" type="double"/> <!-- 规划最大速度 -->
+    <param name="manager/max_acc" value="$(arg max_acc)" type="double"/> <!-- 规划最大加速度 -->
+    <param name="manager/max_jerk" value="4" type="double"/> <!-- 最大跃度 -->
+    <param name="manager/control_points_distance" value="0.4" type="double"/> <!-- 控制点间距 -->
+    <param name="manager/feasibility_tolerance" value="0.05" type="double"/> <!-- 动力学可行性容差 -->
+    <param name="manager/planning_horizon" value="$(arg planning_horizon)" type="double"/> <!-- 规划前视距离 -->
+    <param name="manager/use_distinctive_trajs" value="$(arg use_distinctive_trajs)" type="bool"/> <!-- 是否生成多样轨迹 -->
+    <param name="manager/drone_id" value="$(arg drone_id)"/> <!-- 无人机编号 -->
+    <param name="manager/swarm_trajs_out_topic" value="$(arg swarm_trajs_topic)"/>
+
+  <!-- trajectory optimization 轨迹优化权重 -->
+    <param name="optimization/lambda_smooth" value="1.0" type="double"/> <!-- 平滑权重 -->
+    <param name="optimization/lambda_collision" value="0.5" type="double"/> <!-- 碰撞代价权重 -->
+    <param name="optimization/lambda_feasibility" value="0.1" type="double"/> <!-- 可行性代价权重 -->
+    <param name="optimization/lambda_fitness" value="1.0" type="double"/> <!-- 贴合度权重 -->
+    <param name="optimization/dist0" value="0.5" type="double"/> <!-- 碰撞距离阈值 -->
+    <param name="optimization/swarm_clearance" value="0.5" type="double"/> <!-- 群体避障间距 -->
+    <param name="optimization/max_vel" value="$(arg max_vel)" type="double"/> <!-- 优化阶段速度约束 -->
+    <param name="optimization/max_acc" value="$(arg max_acc)" type="double"/> <!-- 优化阶段加速度约束 -->
+
+    <param name="bspline/limit_vel" value="$(arg max_vel)" type="double"/> <!-- B样条速度上限 -->
+    <param name="bspline/limit_acc" value="$(arg max_acc)" type="double"/> <!-- B样条加速度上限 -->
+    <param name="bspline/limit_ratio" value="1.1" type="double"/> <!-- B样条约束放宽比例 -->
+
+  <!-- objects prediction 动态障碍预测 -->
+    <param name="prediction/obj_num" value="$(arg obj_num_set)" type="int"/> <!-- 动态障碍物数量 -->
+    <param name="prediction/lambda" value="1.0" type="double"/> <!-- 轨迹平滑权重 -->
+    <param name="prediction/predict_rate" value="1.0" type="double"/> <!-- 预测频率 -->
+  
+  
+
+
+  </node>
+
+</launch>

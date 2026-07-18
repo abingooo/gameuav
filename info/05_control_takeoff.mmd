@@ -1,0 +1,53 @@
+flowchart TD
+  subgraph Inputs["Control inputs"]
+    VINS["/vins_fusion/imu_propagate\nVINS odom"]
+    IMU["/mavros/imu/data\nPX4 IMU"]
+    State["/mavros/state\nconnected / armed / mode"]
+    ExtState["/mavros/extended_state\nlanded_state"]
+    RC["/mavros/rc/in\noptional RC"]
+    PositionCmd["/position_cmd\nplanner command"]
+    HoverYaw["/px4ctrl/hover_yaw_cmd"]
+    TakeoffLand["/px4ctrl/takeoff_land\nTAKEOFF=1 LAND=2"]
+  end
+
+  subgraph PX4Ctrl["px4ctrl VINS-only controller"]
+    FSM["PX4CtrlFSM\nMANUAL_CTRL / AUTO_TAKEOFF / AUTO_HOVER / CMD_CTRL / AUTO_LAND"]
+    StartPose["set_start_pose_for_takeoff_land\nstart_pose = VINS pose"]
+    TakeoffRef["get_takeoff_land_des\nx/y/yaw fixed, z ramps"]
+    HoverRef["get_hover_des / set_hov_with_odom"]
+    CmdRef["get_cmd_des\nplanner tracking"]
+    Controller["LinearControl\nKp/Kv position-velocity feedback"]
+    Output["Controller_Output_t\nattitude quaternion + thrust"]
+  end
+
+  subgraph PX4Path["PX4 command path"]
+    AttSp["/mavros/setpoint_raw/attitude"]
+    MavrosSrv["/mavros/set_mode\n/mavros/cmd/arming"]
+    MAVROS["MAVROS"]
+    PX4["PX4 FMU"]
+  end
+
+  VINS --> FSM
+  IMU --> FSM
+  State --> FSM
+  ExtState --> FSM
+  RC --> FSM
+  PositionCmd --> FSM
+  HoverYaw --> FSM
+  TakeoffLand --> FSM
+
+  FSM --> StartPose
+  StartPose --> TakeoffRef
+  FSM --> HoverRef
+  FSM --> CmdRef
+  TakeoffRef --> Controller
+  HoverRef --> Controller
+  CmdRef --> Controller
+  VINS --> Controller
+  IMU --> Controller
+  Controller --> Output --> AttSp --> MAVROS --> PX4
+  FSM --> MavrosSrv --> MAVROS
+
+  note1["PX4 local pose is intentionally not used by px4ctrl.\n/mavros/local_position/pose may still exist from MAVROS,\nbut it is not subscribed by px4ctrl."]
+  note1 -.-> FSM
+

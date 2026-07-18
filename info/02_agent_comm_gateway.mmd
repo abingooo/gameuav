@@ -1,0 +1,61 @@
+flowchart LR
+  subgraph External["External clients"]
+    GCS["Ground-station GCS\n20.0.0.172:8000"]
+    Browser["Browser"]
+    CLI["tools/agentctl.py"]
+  end
+
+  subgraph AgentLayer["Agent layer"]
+    AgentServer["agent/uav_agent/server.py\nTCP 8765"]
+    LaunchMgr["agent/launch_manager\nstart/stop/status"]
+    RosCmdExec["agent/ros_command_executor\nsafe ROS commands"]
+    ModuleCfg["config/modules/uav_agent.yaml\nmodule whitelist"]
+    RosCmdCfg["config/ros_commands/ros_command_executor.yaml\ncommand whitelist"]
+  end
+
+  subgraph CommLayer["Shared communication"]
+    AgentClient["comm/agent_client.py"]
+    AgentProto["comm/protocol/agent_protocol.py"]
+    NetProto["comm/protocol/network_protocol.py"]
+    JsonSer["comm/serializer/json_serializer.py"]
+    TcpLink["comm/tcp_link"]
+    UdpLink["comm/udp_link"]
+  end
+
+  subgraph Gateways["UAV gateways"]
+    NetToRos["gateway/net_to_ros_gateway\nTCP 9100"]
+    RosToNet["gateway/ros_to_net_gateway"]
+    CamStream["gateway/camera_stream_gateway\nHTTP 9200"]
+    Mapping["gateway/topic_mapping\nconfig/topics/ros_interfaces.yaml"]
+  end
+
+  subgraph ROS["ROS runtime"]
+    RosMaster["roscore"]
+    Topics["ROS topics/services"]
+    Modules["MAVROS / VINS / EGO / px4ctrl / cameras"]
+  end
+
+  GCS --> AgentClient
+  CLI --> AgentClient
+  AgentClient --> AgentProto --> AgentServer
+  AgentServer --> ModuleCfg
+  AgentServer --> LaunchMgr --> Modules
+  AgentServer --> RosCmdExec
+  RosCmdExec --> RosCmdCfg
+  RosCmdExec --> Topics
+
+  GCS --> NetToRos
+  NetToRos --> NetProto
+  NetToRos --> Mapping
+  NetToRos --> Topics
+  Topics --> RosToNet --> NetProto
+
+  Browser --> CamStream
+  CamStream --> Topics
+
+  RosMaster --- Topics
+  Topics --- Modules
+  JsonSer --- AgentProto
+  TcpLink --- AgentClient
+  UdpLink -. telemetry helpers .- NetProto
+

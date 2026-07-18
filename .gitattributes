@@ -1,0 +1,23 @@
+* text=auto
+
+*.py text eol=lf
+*.sh text eol=lf
+*.launch text eol=lf
+*.xml text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.txt text eol=lf
+
+*.bin -text
+*.dae -text
+*.gif -text
+*.jpg -text
+*.jpeg -text
+*.mesh -text
+*.npy -text
+*.pdf -text
+*.png -text
+*.ply -text
+*.stl -text

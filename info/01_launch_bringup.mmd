@@ -1,0 +1,31 @@
+flowchart TD
+  AgentCmd["agentctl / GCS module request"] --> UAVAgent["uav_agent\nconfig/modules/uav_agent.yaml"]
+
+  UAVAgent --> EgoCtrl["egoctrl / realflight\nlaunch/bringup_realflight.launch"]
+  UAVAgent --> Standalone["standalone modules\nroscore, realsense, vins, px4ctrl, ego, rgb1_camera"]
+
+  EgoCtrl --> FlightControl["bringup_flight_control.launch"]
+  EgoCtrl --> EgoLaunch["bringup_ego.launch\nEGO-Planner"]
+  EgoCtrl --> OptionalTip["bringup_tiplight.launch\noptional"]
+  EgoCtrl --> OptionalSPF["bringup_see_point_fly.launch\noptional"]
+
+  FlightControl --> StateEst["bringup_state_estimation.launch"]
+  FlightControl --> Px4CtrlLaunch["bringup_px4ctrl.launch"]
+
+  StateEst --> MavrosLaunch["bringup_mavros.launch"]
+  StateEst --> RealsenseLaunch["bringup_realsense.launch"]
+  StateEst --> VinsLaunch["bringup_vins.launch"]
+
+  MavrosLaunch --> MAVROS["/mavros"]
+  RealsenseLaunch --> RSPrelaunch["realsense_nodelet_prelaunch.py\nhardware reset before nodelet"]
+  RSPrelaunch --> RSNode["realsense2_camera\n/camera/*"]
+  VinsLaunch --> VINS["VINS-Fusion\n/vins_fusion/*"]
+  Px4CtrlLaunch --> PX4Ctrl["px4ctrl\n/px4ctrl/*"]
+  EgoLaunch --> EgoPlanner["EGO planner + traj server"]
+  OptionalSPF --> SPFBridge["see_point_fly_bridge"]
+  OptionalTip --> Tiplight["tiplight_serial_node"]
+
+  Standalone --> CamGW["camera_stream_gateway\nTCP 9200"]
+  Standalone --> NetGW["net_to_ros_gateway\nTCP 9100"]
+  Standalone --> RGB1["bringup_rgb1_camera.launch\n/rgb1/image_raw"]
+

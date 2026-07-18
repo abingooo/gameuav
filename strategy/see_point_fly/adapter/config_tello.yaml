@@ -1,0 +1,9 @@
+# GameUAV SPF worker configuration.
+#
+# Keep this separate from upstream/config_tello.yaml so upstream can be updated
+# without overwriting local runtime choices.
+
+api_provider: "openai"
+model_name: "gemini-3.5-flash"
+operational_mode: "adaptive_mode"
+command_loop_delay: 2

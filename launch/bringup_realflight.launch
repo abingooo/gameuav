@@ -1,0 +1,48 @@
+<launch>
+  <arg name="fcu_url" default="/dev/serial/by-id/usb-Auterion_PX4_FMU_v6C.x_0-if00:57600"/>
+  <arg name="camera" default="camera"/>
+  <arg name="camera_serial_no" default=""/>
+  <arg name="camera_usb_port_id" default=""/>
+  <arg name="enable_realsense_color" default="true"/>
+  <arg name="drone_id" default="0"/>
+  <arg name="px4ctrl_no_rc" default="false"/>
+  <arg name="px4ctrl_enable_auto_arm" default="true"/>
+  <arg name="use_tiplight" default="false"/>
+  <arg name="use_see_point_fly" default="false"/>
+  <arg name="spf_image_topic" default="/rgb1/image_raw"/>
+  <arg name="spf_odom_topic" default="/vins_fusion/imu_propagate"/>
+  <arg name="spf_worker_url" default="http://127.0.0.1:9310/infer"/>
+  <arg name="configure_mavros_stream_rates" default="true"/>
+  <arg name="control_ego_position_cmd_topic" default="/control/ego_position_cmd"/>
+  <arg name="control_output_position_cmd_topic" default="/control/position_cmd"/>
+
+  <include file="$(dirname)/bringup_flight_control.launch">
+    <arg name="fcu_url" value="$(arg fcu_url)"/>
+    <arg name="camera" value="$(arg camera)"/>
+    <arg name="camera_serial_no" value="$(arg camera_serial_no)"/>
+    <arg name="camera_usb_port_id" value="$(arg camera_usb_port_id)"/>
+    <arg name="enable_realsense_color" value="$(arg enable_realsense_color)"/>
+    <arg name="px4ctrl_no_rc" value="$(arg px4ctrl_no_rc)"/>
+    <arg name="px4ctrl_enable_auto_arm" value="$(arg px4ctrl_enable_auto_arm)"/>
+    <arg name="configure_mavros_stream_rates" value="$(arg configure_mavros_stream_rates)"/>
+    <arg name="control_ego_position_cmd_topic" value="$(arg control_ego_position_cmd_topic)"/>
+    <arg name="control_output_position_cmd_topic" value="$(arg control_output_position_cmd_topic)"/>
+  </include>
+
+  <include file="$(dirname)/bringup_ego.launch">
+    <arg name="drone_id" value="$(arg drone_id)"/>
+    <arg name="position_cmd_topic" value="$(arg control_ego_position_cmd_topic)"/>
+  </include>
+
+  <group if="$(arg use_tiplight)">
+    <include file="$(dirname)/bringup_tiplight.launch"/>
+  </group>
+
+  <group if="$(arg use_see_point_fly)">
+    <include file="$(dirname)/bringup_see_point_fly.launch">
+      <arg name="image_topic" value="$(arg spf_image_topic)"/>
+      <arg name="odom_topic" value="$(arg spf_odom_topic)"/>
+      <arg name="worker_url" value="$(arg spf_worker_url)"/>
+    </include>
+  </group>
+</launch>

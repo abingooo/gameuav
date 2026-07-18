@@ -1,0 +1,59 @@
+# Catkin and CMake build products
+/build/
+/devel/
+/install/
+/.catkin_tools/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+
+# Python environments and generated metadata
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# ROS and flight runtime output
+/logs/
+/action_visualizations/
+**/action_visualizations/
+*.bag
+*.bag.active
+*.db3
+*.log
+*.pid
+core
+core.*
+/runtime/*.csv
+/runtime/spf_model_benchmark_*.json
+/runtime/realsense_firmware/
+
+# Local credentials and overrides
+.env
+.env.*
+!.env.example
+*.local
+*.pem
+*.key
+
+# Editor and operating-system files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Local archives
+*.tar
+*.tar.gz
+*.tgz
+*.zip

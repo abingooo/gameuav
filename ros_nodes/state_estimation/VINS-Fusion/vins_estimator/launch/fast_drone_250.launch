@@ -1,0 +1,9 @@
+<launch>
+	<remap from="/tf" to="tf"/>
+	<remap from="/tf_static" to="tf_static"/>
+
+	<node name="vins_fusion" pkg="vins"  type="vins_node" output="screen" launch-prefix="$(find vins)/scripts/wait_for_vins_inputs.py" args="$(find vins)/../config/fast_drone_250.yaml"/>
+
+	<!-- <node name="loop_fusion" pkg="loop_fusion"  type="loop_fusion_node" args="$(find vins)/../config/fast_drone_250.yaml" output="screen"/> -->
+
+</launch> 

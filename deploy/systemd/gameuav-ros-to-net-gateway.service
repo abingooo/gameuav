@@ -1,0 +1,19 @@
+[Unit]
+Description=GameUAV ROS to network gateway
+After=network-online.target gameuav-agent.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=uav
+Group=uav
+WorkingDirectory=/home/uav/Desktop/uav_project/gameuav
+EnvironmentFile=/etc/gameuav/gateway.env
+ExecStart=/bin/bash -lc 'source "${GAMEUAV_ROS_SETUP}" && source "${GAMEUAV_WORKSPACE_SETUP}" && export ROS_HOME="${GAMEUAV_ROS_HOME}" ROS_LOG_DIR="${GAMEUAV_ROS_LOG_DIR}" && exec /usr/bin/python3 -m gateway.ros_to_net_gateway.node --uav-id "${GAMEUAV_UAV_ID}" --udp-host "${GAMEUAV_GATEWAY_UDP_HOST}" --udp-port "${GAMEUAV_GATEWAY_UDP_PORT}" --rate-hz "${GAMEUAV_GATEWAY_RATE_HZ}"'
+Restart=on-failure
+RestartSec=2
+KillSignal=SIGINT
+TimeoutStopSec=10
+
+[Install]
+WantedBy=multi-user.target

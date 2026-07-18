@@ -1,0 +1,21 @@
+[Unit]
+Description=GameUAV PX4Ctrl read-only flight monitor
+After=network-online.target gameuav-agent.service
+Wants=network-online.target
+Requires=gameuav-agent.service
+
+[Service]
+Type=simple
+User=uav
+Group=uav
+WorkingDirectory=/home/uav/Desktop/uav_project/gameuav
+EnvironmentFile=/etc/gameuav/agent.env
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/python3 /home/uav/Desktop/uav_project/gameuav/tools/monitor_px4ctrl.py --rate 5 --csv /home/uav/Desktop/uav_project/gameuav/runtime/px4ctrl_monitor.csv
+Restart=always
+RestartSec=3
+KillSignal=SIGINT
+TimeoutStopSec=10
+
+[Install]
+WantedBy=multi-user.target

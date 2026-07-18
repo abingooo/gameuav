@@ -1,0 +1,11 @@
+# GameUAV stable serial device names and permissions.
+#
+# PX4 FMU v6C.x:
+#   /dev/gameuav_px4
+# Tiplight ESP32:
+#   /dev/gameuav_tiplight
+#
+# Users that run ROS nodes should be in the dialout group.
+
+SUBSYSTEM=="tty", ATTRS{idVendor}=="3185", ATTRS{idProduct}=="0038", SYMLINK+="gameuav_px4", GROUP="dialout", MODE="0660"
+SUBSYSTEM=="tty", ATTRS{idVendor}=="303a", ATTRS{idProduct}=="1001", SYMLINK+="gameuav_tiplight", GROUP="dialout", MODE="0660"

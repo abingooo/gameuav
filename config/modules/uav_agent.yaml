@@ -1,0 +1,339 @@
+# Whitelist of modules that uav_agent may start, stop, restart, and query.
+#
+# The GCS sends only a module name plus optional whitelisted args. It must never
+# send arbitrary shell commands.
+modules:
+  roscore:
+    type: process
+    description: ROS master
+    command:
+      - roscore
+
+  mavros:
+    type: launch
+    description: PX4 MAVROS bridge with MAVLink stream-rate setup
+    file: launch/bringup_mavros.launch
+    args:
+      configure_stream_rates: "true"
+    allowed_args:
+      configure_stream_rates:
+        - "true"
+        - "false"
+      fcu_url: null
+
+  realsense:
+    type: launch
+    description: RealSense camera driver
+    file: launch/bringup_realsense.launch
+    allowed_args:
+      camera: null
+      serial_no: null
+      usb_port_id: null
+      enable_color:
+        - "true"
+        - "false"
+
+  usb_camera:
+    type: launch
+    description: USB RGB camera publisher
+    file: launch/bringup_usb_camera.launch
+    args:
+      device: "/dev/video0"
+      width: "640"
+      height: "480"
+      fps: "30"
+      fourcc: "MJPG"
+    allowed_args:
+      device: null
+      width: null
+      height: null
+      fps: null
+      fourcc: null
+      frame_id: null
+      image_topic: null
+
+  rgb1_camera:
+    type: launch
+    autostart: true
+    description: RGB1 front-down camera perceptual interface
+    file: launch/bringup_rgb1_camera.launch
+    args:
+      device: "/dev/v4l/by-id/usb-LRCP_USB2.0_LRCP_USB2.0_SN0001-video-index0"
+      width: "640"
+      height: "480"
+      fps: "30"
+      fourcc: "MJPG"
+      frame_id: "rgb1_camera"
+      image_topic: "/rgb1/image_raw"
+    allowed_args:
+      device: null
+      width: null
+      height: null
+      fps: null
+      fourcc: null
+      frame_id: null
+      image_topic: null
+
+  camera_stream_gateway:
+    type: process
+    description: UAV-local HTTP MJPEG camera stream gateway on TCP 9200
+    command:
+      - uv
+      - run
+      - python
+      - -m
+      - gateway.camera_stream_gateway.node
+      - --host
+      - 0.0.0.0
+      - --port
+      - "9200"
+
+  state_estimation:
+    type: launch
+    description: MAVROS + RealSense + VINS combined bringup
+    file: launch/bringup_state_estimation.launch
+    args:
+      start_mavros: "true"
+      start_realsense: "true"
+      start_vins: "true"
+    allowed_args:
+      fcu_url: null
+      camera: null
+      camera_serial_no: null
+      camera_usb_port_id: null
+      enable_realsense_color:
+        - "true"
+        - "false"
+      start_mavros:
+        - "true"
+        - "false"
+      start_realsense:
+        - "true"
+        - "false"
+      start_vins:
+        - "true"
+        - "false"
+      configure_mavros_stream_rates:
+        - "true"
+        - "false"
+
+  vins:
+    type: launch
+    description: VINS-Fusion state estimator
+    file: launch/bringup_vins.launch
+    allowed_args:
+      vins_launch: null
+
+  ego:
+    type: launch
+    description: EGO-Planner local planner
+    file: launch/bringup_ego.launch
+    args:
+      drone_id: "0"
+    allowed_args:
+      drone_id: null
+
+  see_point_fly:
+    type: launch
+    description: See-Point-Fly bridge; sends bounded position targets directly to px4ctrl through the control interface
+    file: launch/bringup_see_point_fly.launch
+    args:
+      image_topic: "/rgb1/image_raw"
+      odom_topic: "/vins_fusion/imu_propagate"
+      worker_url: "http://127.0.0.1:9310/infer"
+      goal_topic: "/control/spf_position"
+    allowed_args:
+      image_topic: null
+      odom_topic: null
+      worker_url: null
+      goal_topic: null
+
+  see_point_fly_worker:
+    type: process
+    description: See-Point-Fly VLM inference worker on TCP 9310
+    command:
+      - /usr/bin/env
+      - PYTHONUNBUFFERED=1
+      - PYNPUT_BACKEND=dummy
+      - SPF_OPENAI_WIRE_API=chat.completions
+      - uv
+      - run
+      - --project
+      - strategy/see_point_fly/upstream
+      - python
+      - strategy/see_point_fly/worker/spf_worker.py
+      - --host
+      - 0.0.0.0
+      - --port
+      - "9310"
+
+  px4ctrl:
+    type: launch
+    description: PX4 attitude/thrust controller
+    file: launch/bringup_px4ctrl.launch
+    args:
+      no_rc: "false"
+      enable_auto_arm: "true"
+    allowed_args:
+      odom_topic: null
+      cmd_topic: null
+      hover_yaw_topic: null
+      takeoff_land_topic: null
+      no_rc:
+        - "true"
+        - "false"
+      enable_auto_arm:
+        - "true"
+        - "false"
+
+  control_interface:
+    type: launch
+    description: Control command facade and mux for ego-position, direct position, and speed commands
+    file: launch/bringup_control_interface.launch
+    args:
+      odom_topic: "/vins_fusion/imu_propagate"
+      ego_position_cmd_topic: "/control/ego_position_cmd"
+      output_position_cmd_topic: "/control/position_cmd"
+      spf_position_topic: "/control/spf_position"
+      spf_position_timeout: "0.0"
+    allowed_args:
+      odom_topic: null
+      ego_position_cmd_topic: null
+      output_position_cmd_topic: null
+      direct_position_topic: null
+      spf_position_topic: null
+      speed_topic: null
+      ego_position_topic: null
+      stop_topic: null
+      planning_goal_topic: null
+      planning_yaw_topic: null
+      rate_hz: null
+      spf_position_timeout: null
+      max_speed: null
+      max_vertical_speed: null
+      min_z: null
+      max_z: null
+
+  flight_control:
+    type: launch
+    description: State estimation plus px4ctrl
+    file: launch/bringup_flight_control.launch
+    args:
+      px4ctrl_no_rc: "false"
+      px4ctrl_enable_auto_arm: "true"
+    allowed_args:
+      fcu_url: null
+      camera: null
+      camera_serial_no: null
+      camera_usb_port_id: null
+      enable_realsense_color:
+        - "true"
+        - "false"
+      px4ctrl_no_rc:
+        - "true"
+        - "false"
+      px4ctrl_enable_auto_arm:
+        - "true"
+        - "false"
+      configure_mavros_stream_rates:
+        - "true"
+        - "false"
+      start_control_interface:
+        - "true"
+        - "false"
+      control_ego_position_cmd_topic: null
+      control_output_position_cmd_topic: null
+
+  realflight:
+    type: launch
+    description: Full real-flight stack except optional tiplight
+    file: launch/bringup_realflight.launch
+    args:
+      drone_id: "0"
+      use_tiplight: "false"
+      use_see_point_fly: "false"
+    allowed_args:
+      fcu_url: null
+      camera: null
+      camera_serial_no: null
+      camera_usb_port_id: null
+      enable_realsense_color:
+        - "true"
+        - "false"
+      drone_id: null
+      px4ctrl_no_rc:
+        - "true"
+        - "false"
+      px4ctrl_enable_auto_arm:
+        - "true"
+        - "false"
+      use_tiplight:
+        - "true"
+        - "false"
+      use_see_point_fly:
+        - "true"
+        - "false"
+      spf_image_topic: null
+      spf_odom_topic: null
+      spf_worker_url: null
+      configure_mavros_stream_rates:
+        - "true"
+        - "false"
+      control_ego_position_cmd_topic: null
+      control_output_position_cmd_topic: null
+
+  egoctrl:
+    type: launch
+    description: "One-click single-UAV EgoCtrl stack: MAVROS + RealSense + VINS + EGO + px4ctrl"
+    file: launch/bringup_realflight.launch
+    pre_start:
+      command:
+        - python3
+        - tools/reboot_fcu_before_egoctrl.py
+        - --fcu-url
+        - "{fcu_url}"
+      timeout: 55
+    args:
+      fcu_url: "/dev/serial/by-id/usb-Auterion_PX4_FMU_v6C.x_0-if00:57600"
+      drone_id: "0"
+      use_tiplight: "false"
+      use_see_point_fly: "false"
+    allowed_args:
+      fcu_url: null
+      camera: null
+      camera_serial_no: null
+      camera_usb_port_id: null
+      enable_realsense_color:
+        - "true"
+        - "false"
+      drone_id: null
+      px4ctrl_no_rc:
+        - "true"
+        - "false"
+      px4ctrl_enable_auto_arm:
+        - "true"
+        - "false"
+      use_tiplight:
+        - "true"
+        - "false"
+      use_see_point_fly:
+        - "true"
+        - "false"
+      spf_image_topic: null
+      spf_odom_topic: null
+      spf_worker_url: null
+      configure_mavros_stream_rates:
+        - "true"
+        - "false"
+      control_ego_position_cmd_topic: null
+      control_output_position_cmd_topic: null
+
+  tiplight:
+    type: launch
+    description: LED tiplight serial bridge
+    file: launch/bringup_tiplight.launch
+    allowed_args:
+      port: null
+      baud: null
+      command_topic: null
+      status_topic: null

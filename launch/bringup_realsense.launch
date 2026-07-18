@@ -1,0 +1,29 @@
+<launch>
+  <arg name="camera" default="camera"/>
+  <arg name="serial_no" default=""/>
+  <arg name="usb_port_id" default=""/>
+  <arg name="enable_depth" default="true"/>
+  <arg name="enable_infra1" default="true"/>
+  <arg name="enable_infra2" default="true"/>
+  <arg name="enable_color" default="true"/>
+  <arg name="enable_gyro" default="false"/>
+  <arg name="enable_accel" default="false"/>
+  <arg name="initial_reset" default="false"/>
+  <arg name="launch_prefix" default="$(find gameuav_usb_camera)/scripts/realsense_nodelet_prelaunch.py"/>
+  <arg name="output" default="screen"/>
+
+  <include file="$(find realsense2_camera)/launch/rs_camera.launch">
+    <arg name="camera" value="$(arg camera)"/>
+    <arg name="serial_no" value="$(arg serial_no)"/>
+    <arg name="usb_port_id" value="$(arg usb_port_id)"/>
+    <arg name="enable_depth" value="$(arg enable_depth)"/>
+    <arg name="enable_infra1" value="$(arg enable_infra1)"/>
+    <arg name="enable_infra2" value="$(arg enable_infra2)"/>
+    <arg name="enable_color" value="$(arg enable_color)"/>
+    <arg name="enable_gyro" value="$(arg enable_gyro)"/>
+    <arg name="enable_accel" value="$(arg enable_accel)"/>
+    <arg name="initial_reset" value="$(arg initial_reset)"/>
+    <arg name="launch_prefix" value="$(arg launch_prefix)"/>
+    <arg name="output" value="$(arg output)"/>
+  </include>
+</launch>

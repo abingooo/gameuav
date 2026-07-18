@@ -1,0 +1,23 @@
+{
+  "repository": "git@github.com:abingooo/muavold.git",
+  "branch": "dev",
+  "commit": "9c0121ae60722d5e1db7d99380cb2cd734aab48a",
+  "commit_subject": "v0.19 overshoot bug fixed",
+  "imported_at": "2026-07-18",
+  "included": [
+    "src/langguide",
+    "src/guide_module"
+  ],
+  "excluded": [
+    "src/langguide/Untitled",
+    "src/langguide/scripts/egovlm/oldlog",
+    "src/langguide/scripts/lang_manage",
+    "src/guide_module/guide_panel",
+    "generated __pycache__ and .pyc files",
+    "all non-SMPF legacy workspace components"
+  ],
+  "local_modifications": [
+    "removed committed API credential values",
+    "added environment-variable credential loading"
+  ]
+}

@@ -1,0 +1,535 @@
+# Whitelist for ROS runtime commands exposed through uav_agent.
+#
+# The GCS sends only a command name plus whitelisted arguments. Topics, message
+# types, and message templates are controlled locally here.
+commands:
+  health:
+    enabled: true
+    type: builtin
+    description: Check whether ROS master is reachable.
+
+  command_list:
+    enabled: true
+    type: builtin
+    description: List ROS runtime commands exposed by this agent.
+
+  topic_list:
+    enabled: true
+    type: builtin
+    description: List ROS topics through rostopic list.
+    timeout: 5.0
+
+  node_list:
+    enabled: true
+    type: builtin
+    description: List ROS nodes through rosnode list.
+    timeout: 5.0
+
+  topic_hz:
+    enabled: true
+    type: builtin
+    description: Measure a ROS topic rate on the UAV through rostopic hz.
+    timeout: 2.5
+    args:
+      topic:
+        type: string
+        required: true
+      timeout:
+        type: float
+        default: 2.5
+        min: 1.0
+        max: 10.0
+
+  topic_info:
+    enabled: true
+    type: builtin
+    description: Inspect ROS topic publishers and subscribers through rostopic info.
+    timeout: 5.0
+    args:
+      topic:
+        type: string
+        required: true
+
+  topic_echo:
+    enabled: true
+    type: builtin
+    description: Sample one ROS topic message through rostopic echo.
+    timeout: 5.0
+    args:
+      topic:
+        type: string
+        required: true
+      timeout:
+        type: float
+        default: 5.0
+        min: 1.0
+        max: 30.0
+
+  spf_e2e_check:
+    enabled: true
+    type: builtin
+    description: Atomically publish an SPF command and capture end-to-end ROS outputs.
+    timeout: 60.0
+    args:
+      data:
+        type: string
+        required: true
+      timeout:
+        type: float
+        default: 45.0
+        min: 5.0
+        max: 120.0
+
+  set_goal:
+    enabled: true
+    type: publish
+    description: Publish a planning goal pose.
+    topic: /planning/goal
+    msg_type: geometry_msgs/PoseStamped
+    timeout: 5.0
+    args:
+      frame_id:
+        type: string
+        default: world
+      x:
+        type: float
+        required: true
+        min: -1000.0
+        max: 1000.0
+      y:
+        type: float
+        required: true
+        min: -1000.0
+        max: 1000.0
+      z:
+        type: float
+        required: true
+        min: -100.0
+        max: 100.0
+      yaw:
+        type: float
+        default: 0.0
+        min: -6.2832
+        max: 6.2832
+    message:
+      header:
+        frame_id: "{frame_id}"
+      pose:
+        position:
+          x: "{x}"
+          y: "{y}"
+          z: "{z}"
+        orientation:
+          x: 0.0
+          y: 0.0
+          z: 0.0
+          w: 1.0
+    transforms:
+      yaw_to_quaternion: true
+
+  ego_position:
+    enabled: true
+    type: publish
+    description: Publish an ego/body-frame relative goal for the control interface; it converts to an EGO planning goal.
+    topic: /control/ego_position
+    msg_type: geometry_msgs/PoseStamped
+    timeout: 5.0
+    args:
+      frame_id:
+        type: string
+        default: body
+        allowed_values:
+          - body
+          - base_link
+          - ego
+          - world
+          - map
+          - odom
+      x:
+        type: float
+        required: true
+        min: -10.0
+        max: 10.0
+      y:
+        type: float
+        required: true
+        min: -10.0
+        max: 10.0
+      z:
+        type: float
+        required: true
+        min: -5.0
+        max: 5.0
+      yaw:
+        type: float
+        default: 0.0
+        min: -6.2832
+        max: 6.2832
+    message:
+      header:
+        frame_id: "{frame_id}"
+      pose:
+        position:
+          x: "{x}"
+          y: "{y}"
+          z: "{z}"
+        orientation:
+          x: 0.0
+          y: 0.0
+          z: 0.0
+          w: 1.0
+    transforms:
+      yaw_to_quaternion: true
+
+  position:
+    enabled: true
+    type: publish
+    description: Publish a direct position target to the control interface; bypasses EGO obstacle planning.
+    topic: /control/position
+    msg_type: geometry_msgs/PoseStamped
+    timeout: 5.0
+    args:
+      frame_id:
+        type: string
+        default: world
+        allowed_values:
+          - world
+          - map
+          - odom
+          - body
+          - base_link
+          - ego
+      x:
+        type: float
+        required: true
+        min: -1000.0
+        max: 1000.0
+      y:
+        type: float
+        required: true
+        min: -1000.0
+        max: 1000.0
+      z:
+        type: float
+        required: true
+        min: -100.0
+        max: 100.0
+      yaw:
+        type: float
+        default: 0.0
+        min: -6.2832
+        max: 6.2832
+    message:
+      header:
+        frame_id: "{frame_id}"
+      pose:
+        position:
+          x: "{x}"
+          y: "{y}"
+          z: "{z}"
+        orientation:
+          x: 0.0
+          y: 0.0
+          z: 0.0
+          w: 1.0
+    transforms:
+      yaw_to_quaternion: true
+
+  speed:
+    enabled: true
+    type: publish
+    description: Publish a bounded speed command to the control interface; command expires quickly unless refreshed.
+    topic: /control/speed
+    msg_type: geometry_msgs/TwistStamped
+    timeout: 5.0
+    args:
+      frame_id:
+        type: string
+        default: body
+        allowed_values:
+          - body
+          - base_link
+          - ego
+          - world
+          - map
+          - odom
+      vx:
+        type: float
+        required: true
+        min: -5.0
+        max: 5.0
+      vy:
+        type: float
+        required: true
+        min: -5.0
+        max: 5.0
+      vz:
+        type: float
+        required: true
+        min: -2.0
+        max: 2.0
+      yaw_rate:
+        type: float
+        default: 0.0
+        min: -3.1416
+        max: 3.1416
+    message:
+      header:
+        frame_id: "{frame_id}"
+      twist:
+        linear:
+          x: "{vx}"
+          y: "{vy}"
+          z: "{vz}"
+        angular:
+          x: 0.0
+          y: 0.0
+          z: "{yaw_rate}"
+
+  control_stop:
+    enabled: true
+    type: publish
+    description: Ask the control interface to hold the current odometry position.
+    topic: /control/stop
+    msg_type: std_msgs/Empty
+    timeout: 5.0
+    args: {}
+    message: {}
+
+  tiplight:
+    enabled: true
+    type: publish
+    description: Publish a tiplight command string.
+    topic: /actuation/tiplight_cmd
+    msg_type: std_msgs/String
+    timeout: 5.0
+    args:
+      data:
+        type: string
+        required: true
+        allowed_values:
+          - "default"
+          - "ready"
+          - "takeoff"
+          - "hover"
+          - "game"
+          - "defense"
+          - "enemy"
+          - "abort"
+          - "next"
+          - "prev"
+          - "status"
+    message:
+      data: "{data}"
+
+  spf_user_command:
+    enabled: true
+    type: publish
+    description: Publish a See-Point-Fly natural language command.
+    topic: /spf/user_command
+    msg_type: std_msgs/String
+    timeout: 5.0
+    args:
+      data:
+        type: string
+        required: true
+        allow_natural_text: true
+        max_length: 300
+    message:
+      data: "{data}"
+
+  spf_action_command:
+    enabled: true
+    type: publish
+    description: Publish a validated cached SPF preview action to the mission bridge.
+    topic: /spf/action_command
+    msg_type: std_msgs/String
+    timeout: 5.0
+    args:
+      data:
+        type: string
+        required: true
+        allow_natural_text: true
+        max_length: 2000
+    message:
+      data: "{data}"
+
+  spf_task_enable:
+    enabled: true
+    type: publish
+    description: Explicitly enable or disable the SPF continuous task executor.
+    topic: /spf/task/enable
+    msg_type: std_msgs/Bool
+    timeout: 5.0
+    args:
+      data:
+        type: bool
+        required: true
+    message:
+      data: "{data}"
+
+  spf_task_start:
+    enabled: true
+    type: publish
+    description: Start a continuous SPF task while the vehicle is already hovering.
+    topic: /spf/task/start
+    msg_type: std_msgs/String
+    timeout: 5.0
+    args:
+      data:
+        type: string
+        required: true
+        allow_natural_text: true
+        max_length: 300
+    message:
+      data: "{data}"
+
+  spf_task_control:
+    enabled: true
+    type: publish
+    description: Abort, complete, or reset the SPF continuous task state.
+    topic: /spf/task/control
+    msg_type: std_msgs/String
+    timeout: 5.0
+    args:
+      data:
+        type: string
+        required: true
+        allowed_values:
+          - "abort"
+          - "complete"
+          - "reset"
+    message:
+      data: "{data}"
+
+  takeoff:
+    enabled: false
+    type: publish
+    description: Disabled by default. Publish px4ctrl takeoff command only after safety review.
+    topic: /px4ctrl/takeoff_land
+    msg_type: quadrotor_msgs/TakeoffLand
+    args:
+      takeoff_land_cmd:
+        type: int
+        default: 1
+    message:
+      takeoff_land_cmd: "{takeoff_land_cmd}"
+
+  land:
+    enabled: false
+    type: publish
+    description: Disabled by default. Publish px4ctrl land command only after safety review.
+    topic: /px4ctrl/takeoff_land
+    msg_type: quadrotor_msgs/TakeoffLand
+    args:
+      takeoff_land_cmd:
+        type: int
+        default: 2
+    message:
+      takeoff_land_cmd: "{takeoff_land_cmd}"
+
+  safe_takeoff:
+    enabled: true
+    type: safety_command
+    description: Dry-run safety gate for px4ctrl takeoff. It does not publish unless dry_run=false and allow_execute=true.
+    action: takeoff
+    dry_run: true
+    allow_execute: true
+    check_cache_ttl: 10.0
+    timeout: 5.0
+    args:
+      dry_run:
+        type: bool
+        default: true
+    checks:
+      require_ros_master: true
+      list_timeout: 2.0
+      sample_timeout: 4.0
+      required_nodes:
+        - /mavros
+        - /px4ctrl
+      required_topics:
+        - /mavros/state
+        - /mavros/extended_state
+        - /mavros/local_position/pose
+        - /vins_fusion/imu_propagate
+      required_subscriber_topics:
+        - /px4ctrl/takeoff_land
+      state:
+        name: mavros_state
+        topic: /mavros/state
+        require_connected: true
+        require_armed: false
+      extended_state:
+        name: mavros_extended_state
+        topic: /mavros/extended_state
+        allowed_landed_states:
+          - 1
+      sample_topics:
+        - name: px4_local_pose
+          topic: /mavros/local_position/pose
+        - name: odom
+          topic: /vins_fusion/imu_propagate
+    publish:
+      topic: /px4ctrl/takeoff_land
+      msg_type: quadrotor_msgs/TakeoffLand
+      timeout: 5.0
+      message:
+        takeoff_land_cmd: 1
+
+  safe_land:
+    enabled: true
+    type: safety_command
+    description: Dry-run safety gate for px4ctrl land. It does not publish unless dry_run=false and allow_execute=true.
+    action: land
+    dry_run: true
+    allow_execute: false
+    timeout: 5.0
+    args:
+      dry_run:
+        type: bool
+        default: true
+    checks:
+      require_ros_master: true
+      list_timeout: 2.0
+      sample_timeout: 4.0
+      required_nodes:
+        - /mavros
+        - /px4ctrl
+      required_topics:
+        - /mavros/state
+        - /mavros/extended_state
+        - /mavros/local_position/pose
+        - /vins_fusion/imu_propagate
+      required_subscriber_topics:
+        - /px4ctrl/takeoff_land
+      state:
+        name: mavros_state
+        topic: /mavros/state
+        require_connected: true
+      extended_state:
+        name: mavros_extended_state
+        topic: /mavros/extended_state
+        allowed_landed_states:
+          - 2
+      sample_topics:
+        - name: px4_local_pose
+          topic: /mavros/local_position/pose
+        - name: odom
+          topic: /vins_fusion/imu_propagate
+    publish:
+      topic: /px4ctrl/takeoff_land
+      msg_type: quadrotor_msgs/TakeoffLand
+      timeout: 5.0
+      message:
+        takeoff_land_cmd: 2
+
+  arm:
+    enabled: false
+    type: builtin
+    description: Reserved for future MAVROS arming service call.
+
+  mode:
+    enabled: false
+    type: builtin
+    description: Reserved for future MAVROS mode switch service call.

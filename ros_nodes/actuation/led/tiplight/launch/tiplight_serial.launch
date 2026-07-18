@@ -1,0 +1,17 @@
+<launch>
+  <arg name="port" default="auto" />
+  <arg name="baud" default="115200" />
+  <arg name="command_topic" default="/actuation/tiplight_cmd" />
+  <arg name="status_topic" default="/status/tiplight" />
+  <arg name="read_seconds" default="0.4" />
+  <arg name="reconnect_seconds" default="1.0" />
+
+  <node pkg="tiplight" type="tiplight_serial_node.py" name="tiplight_serial_node" output="screen">
+    <param name="port" value="$(arg port)" />
+    <param name="baud" value="$(arg baud)" />
+    <param name="command_topic" value="$(arg command_topic)" />
+    <param name="status_topic" value="$(arg status_topic)" />
+    <param name="read_seconds" value="$(arg read_seconds)" />
+    <param name="reconnect_seconds" value="$(arg reconnect_seconds)" />
+  </node>
+</launch>

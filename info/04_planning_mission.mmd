@@ -1,0 +1,46 @@
+flowchart LR
+  subgraph Inputs["Mission inputs"]
+    GCSGoal["GCS set_goal\n/planning/goal"]
+    GCSYaw["GCS set_yaw\n/planning/goal_yaw_deg"]
+    SPFCommand["/spf/user_command\nnatural language"]
+    RGB1["/rgb1/image_raw"]
+    VinsOdom["/vins_fusion/imu_propagate"]
+  end
+
+  subgraph SPF["Optional See-Point-Fly"]
+    Worker["SPF worker\nstrategy/see_point_fly/worker\nHTTP 9310"]
+    Bridge["see_point_fly_bridge\nmission ROS bridge"]
+  end
+
+  subgraph Ego["EGO-Planner stack"]
+    PlannerNode["drone_0_ego_planner_node"]
+    PlanEnv["plan_env / grid_map"]
+    PathSearch["path_searching / dyn_a_star"]
+    BsplineOpt["bspline_opt"]
+    TrajServer["drone_0_traj_server"]
+  end
+
+  subgraph Outputs["Planner outputs"]
+    PositionCmd["/position_cmd\nquadrotor_msgs/PositionCommand"]
+    Trigger["/traj_start_trigger\nfrom px4ctrl after takeoff"]
+    DebugTraj["/drone_0_planning/*\nbspline / data_display"]
+  end
+
+  SPFCommand --> Bridge
+  RGB1 --> Bridge
+  VinsOdom --> Bridge
+  Bridge --> Worker
+  Worker --> Bridge
+  Bridge --> GCSGoal
+
+  GCSGoal --> PlannerNode
+  GCSYaw --> PlannerNode
+  VinsOdom --> PlannerNode
+  Trigger --> PlannerNode
+  PlannerNode --> PlanEnv
+  PlannerNode --> PathSearch
+  PlannerNode --> BsplineOpt
+  BsplineOpt --> TrajServer
+  TrajServer --> PositionCmd
+  PlannerNode --> DebugTraj
+

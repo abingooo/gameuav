@@ -1,0 +1,36 @@
+<launch>
+  <arg name="fcu_url" default="/dev/serial/by-id/usb-Auterion_PX4_FMU_v6C.x_0-if00:57600"/>
+  <arg name="camera" default="camera"/>
+  <arg name="camera_serial_no" default=""/>
+  <arg name="camera_usb_port_id" default=""/>
+  <arg name="enable_realsense_color" default="true"/>
+  <arg name="px4ctrl_no_rc" default="false"/>
+  <arg name="px4ctrl_enable_auto_arm" default="true"/>
+  <arg name="configure_mavros_stream_rates" default="true"/>
+  <arg name="start_control_interface" default="true"/>
+  <arg name="control_ego_position_cmd_topic" default="/control/ego_position_cmd"/>
+  <arg name="control_output_position_cmd_topic" default="/control/position_cmd"/>
+
+  <include file="$(dirname)/bringup_state_estimation.launch">
+    <arg name="fcu_url" value="$(arg fcu_url)"/>
+    <arg name="camera" value="$(arg camera)"/>
+    <arg name="camera_serial_no" value="$(arg camera_serial_no)"/>
+    <arg name="camera_usb_port_id" value="$(arg camera_usb_port_id)"/>
+    <arg name="enable_realsense_color" value="$(arg enable_realsense_color)"/>
+    <arg name="configure_mavros_stream_rates" value="$(arg configure_mavros_stream_rates)"/>
+  </include>
+
+  <include file="$(dirname)/bringup_px4ctrl.launch">
+    <arg name="cmd_topic" value="$(arg control_output_position_cmd_topic)"/>
+    <arg name="no_rc" value="$(arg px4ctrl_no_rc)"/>
+    <arg name="enable_auto_arm" value="$(arg px4ctrl_enable_auto_arm)"/>
+  </include>
+
+  <group if="$(arg start_control_interface)">
+    <include file="$(dirname)/bringup_control_interface.launch">
+      <arg name="odom_topic" value="/vins_fusion/imu_propagate"/>
+      <arg name="ego_position_cmd_topic" value="$(arg control_ego_position_cmd_topic)"/>
+      <arg name="output_position_cmd_topic" value="$(arg control_output_position_cmd_topic)"/>
+    </include>
+  </group>
+</launch>

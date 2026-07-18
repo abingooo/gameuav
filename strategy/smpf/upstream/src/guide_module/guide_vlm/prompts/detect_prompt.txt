@@ -1,0 +1,16 @@
+Analyze the drone control instruction: '{instruction}'
+
+1) Extract the single target object mentioned in the instruction.
+2) If multiple similar objects exist, pick the one that best matches the instruction (e.g., left/right/larger/color). If uncertain, output an empty box.
+3) Draw a bounding box around the entire target object.
+4) If the target object cannot be found, output an empty box.
+
+Return ONLY a JSON array (no code fences, no extra text) with exactly one object in English:
+[{{"label": "<target_object>", "box_2d": [ymin, xmin, ymax, xmax]}}]
+
+Strict box_2d rules:
+- The list MUST contain exactly 4 integers in the order [ymin, xmin, ymax, xmax], normalized to 0-1000.
+- Clamp to [0, 1000], ensure ymin <= ymax and xmin <= xmax.
+- If you cannot confidently provide 4 integers, set box_2d to [].
+
+Before responding, self-check that box_2d length is exactly 4 integers; otherwise return [].

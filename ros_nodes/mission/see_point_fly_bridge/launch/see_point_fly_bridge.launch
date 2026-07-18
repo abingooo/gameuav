@@ -1,0 +1,71 @@
+<launch>
+  <arg name="image_topic" default="/rgb1/image_raw"/>
+  <arg name="odom_topic" default="/vins_fusion/imu_propagate"/>
+  <arg name="command_topic" default="/spf/user_command"/>
+  <arg name="action_topic" default="/spf/action_command"/>
+  <arg name="enable_topic" default="/spf/enable"/>
+  <arg name="goal_topic" default="/control/spf_position"/>
+  <arg name="status_topic" default="/spf/status"/>
+  <arg name="worker_url" default="http://127.0.0.1:9310/infer"/>
+
+  <node pkg="see_point_fly_bridge" name="see_point_fly_bridge" type="see_point_fly_bridge.py" output="screen">
+    <param name="worker_url" value="$(arg worker_url)"/>
+    <param name="worker_timeout_sec" value="90.0"/>
+
+    <param name="image_topic" value="$(arg image_topic)"/>
+    <param name="odom_topic" value="$(arg odom_topic)"/>
+    <param name="command_topic" value="$(arg command_topic)"/>
+    <param name="action_topic" value="$(arg action_topic)"/>
+    <param name="enable_topic" value="$(arg enable_topic)"/>
+    <param name="goal_topic" value="$(arg goal_topic)"/>
+    <param name="status_topic" value="$(arg status_topic)"/>
+
+    <param name="manual_enable_required" value="false"/>
+    <param name="max_step_xy" value="1.5"/>
+    <param name="max_step_z" value="0.3"/>
+    <param name="min_goal_distance_xy" value="0.0"/>
+    <param name="min_z" value="0.4"/>
+    <param name="max_z" value="1.5"/>
+    <param name="rate_limit_sec" value="2.0"/>
+    <param name="preview_max_age_sec" value="30.0"/>
+    <param name="image_timeout_sec" value="2.0"/>
+    <param name="odom_timeout_sec" value="1.0"/>
+    <param name="max_abs_odom_position" value="100.0"/>
+    <param name="frame_id" value="world"/>
+    <param name="goal_projection_enabled" value="true"/>
+    <param name="occupancy_topic" value="/drone_0_ego_planner_node/grid_map/occupancy_inflate"/>
+    <param name="occupancy_timeout_sec" value="1.0"/>
+    <param name="goal_clearance_radius" value="0.25"/>
+    <param name="goal_projection_step" value="0.1"/>
+    <param name="goal_projection_min_backoff" value="0.4"/>
+    <param name="goal_projection_max_backoff" value="1.2"/>
+    <param name="goal_projection_max_points" value="20000"/>
+  </node>
+
+  <node pkg="see_point_fly_bridge" name="spf_task_executor" type="spf_task_executor.py" output="screen">
+    <param name="start_topic" value="/spf/task/start"/>
+    <param name="control_topic" value="/spf/task/control"/>
+    <param name="enable_topic" value="/spf/task/enable"/>
+    <param name="status_topic" value="/spf/task/status"/>
+    <param name="command_topic" value="$(arg command_topic)"/>
+    <param name="last_goal_topic" value="/spf/last_goal"/>
+    <param name="odom_topic" value="$(arg odom_topic)"/>
+    <param name="mavros_state_topic" value="/mavros/state"/>
+
+    <param name="goal_ack_timeout_sec" value="95.0"/>
+    <param name="goal_timeout_sec" value="45.0"/>
+    <param name="task_timeout_sec" value="300.0"/>
+    <param name="cycle_delay_sec" value="1.0"/>
+    <param name="arrival_settle_sec" value="1.0"/>
+    <param name="goal_tolerance_xy" value="0.25"/>
+    <param name="goal_tolerance_z" value="0.20"/>
+    <param name="arrival_max_speed" value="0.25"/>
+    <param name="odom_timeout_sec" value="1.0"/>
+    <param name="min_start_z" value="0.4"/>
+    <param name="max_start_z" value="1.5"/>
+    <param name="start_max_speed" value="0.5"/>
+    <param name="allow_tabletop_start_disarmed" value="true"/>
+    <param name="tabletop_min_start_z" value="-0.2"/>
+    <param name="max_cycles" value="20"/>
+  </node>
+</launch>

@@ -1,0 +1,15 @@
+Analyze the drone control instruction: '{instruction}'
+
+1. Extract the target object mentioned in the instruction
+2. Identify the specific object in the image if there are multiple similar objects
+    (based on description like "on the left", "larger", "blue", etc.)
+3. Draw a bounding box around the entire target object
+
+Return the answer as a JSON array with the following format:
+[{{"label": "<target_object>","box_2d": [ymin, xmin, ymax, xmax]}}] where:
+- box_2d is [ymin, xmin, ymax, xmax] format normalized to 0-1000
+- All values in box_2d must be integers
+- label is the extracted target object English name
+
+Never return any additional text, markdown formatting, or explanations.
+Only return the JSON array as specified.

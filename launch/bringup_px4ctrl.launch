@@ -1,0 +1,19 @@
+<launch>
+  <arg name="odom_topic" default="vins_fusion/imu_propagate"/>
+  <arg name="cmd_topic" default="position_cmd"/>
+  <arg name="hover_yaw_topic" default="px4ctrl/hover_yaw_cmd"/>
+  <arg name="takeoff_land_topic" default="px4ctrl/takeoff_land"/>
+  <arg name="no_rc" default="false"/>
+  <arg name="enable_auto_arm" default="true"/>
+
+  <node pkg="px4ctrl" type="px4ctrl_node" name="px4ctrl" output="screen">
+    <remap from="~odom" to="$(arg odom_topic)"/>
+    <remap from="~cmd" to="$(arg cmd_topic)"/>
+    <remap from="~hover_yaw_cmd" to="$(arg hover_yaw_topic)"/>
+    <remap from="~takeoff_land" to="$(arg takeoff_land_topic)"/>
+
+    <rosparam command="load" file="$(find px4ctrl)/config/ctrl_param_fpv.yaml"/>
+    <param name="auto_takeoff_land/no_RC" value="$(arg no_rc)"/>
+    <param name="auto_takeoff_land/enable_auto_arm" value="$(arg enable_auto_arm)"/>
+  </node>
+</launch>

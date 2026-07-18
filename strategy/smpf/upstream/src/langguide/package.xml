@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>langguide</name>
+  <version>0.0.1</version>
+  <description>
+    LangGuide provides basic RGB-D subscription scaffolding along with status publication
+    and a service hook for future language-guided control features.
+  </description>
+
+  <maintainer email="uav@example.com">LangGuide Maintainer</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <depend>rospy</depend>
+  <depend>sensor_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>std_srvs</depend>
+
+  <export/>
+</package>

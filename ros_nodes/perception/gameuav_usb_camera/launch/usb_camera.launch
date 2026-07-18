@@ -1,0 +1,19 @@
+<launch>
+  <arg name="device" default="/dev/video0"/>
+  <arg name="width" default="640"/>
+  <arg name="height" default="480"/>
+  <arg name="fps" default="30"/>
+  <arg name="fourcc" default="MJPG"/>
+  <arg name="frame_id" default="usb_camera"/>
+  <arg name="image_topic" default="/usb_camera/image_raw"/>
+
+  <node pkg="gameuav_usb_camera" type="usb_camera_node.py" name="gameuav_usb_camera" output="screen">
+    <param name="device" value="$(arg device)"/>
+    <param name="width" value="$(arg width)"/>
+    <param name="height" value="$(arg height)"/>
+    <param name="fps" value="$(arg fps)"/>
+    <param name="fourcc" value="$(arg fourcc)"/>
+    <param name="frame_id" value="$(arg frame_id)"/>
+    <param name="image_topic" value="$(arg image_topic)"/>
+  </node>
+</launch>

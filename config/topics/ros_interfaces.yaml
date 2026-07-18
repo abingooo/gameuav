@@ -1,0 +1,234 @@
+version: 1
+scope: local_ros
+identity_policy:
+  ros_topics_carry_uav_identity: false
+  network_identity_fields:
+    - uav_id
+    - target_id
+
+public_topics:
+  perception:
+    left_ir_image:
+      topic: /camera/infra1/image_rect_raw
+      type: sensor_msgs/Image
+      direction: output
+    right_ir_image:
+      topic: /camera/infra2/image_rect_raw
+      type: sensor_msgs/Image
+      direction: output
+    depth_image:
+      topic: /camera/depth/image_rect_raw
+      type: sensor_msgs/Image
+      direction: output
+    color_image:
+      topic: /camera/color/image_raw
+      type: sensor_msgs/Image
+      direction: output
+    usb_rgb_image:
+      topic: /usb_camera/image_raw
+      type: sensor_msgs/Image
+      direction: output
+    rgb1_image:
+      topic: /rgb1/image_raw
+      type: sensor_msgs/Image
+      direction: output
+
+  mavros:
+    state:
+      topic: /mavros/state
+      type: mavros_msgs/State
+      direction: output
+    extended_state:
+      topic: /mavros/extended_state
+      type: mavros_msgs/ExtendedState
+      direction: output
+    local_position:
+      topic: /mavros/local_position/pose
+      type: geometry_msgs/PoseStamped
+      direction: output
+    statustext:
+      topic: /mavros/statustext/recv
+      type: mavros_msgs/StatusText
+      direction: output
+    imu_raw:
+      topic: /mavros/imu/data_raw
+      type: sensor_msgs/Imu
+      direction: output
+    imu:
+      topic: /mavros/imu/data
+      type: sensor_msgs/Imu
+      direction: output
+    battery:
+      topic: /mavros/battery
+      type: sensor_msgs/BatteryState
+      direction: output
+    rc:
+      topic: /mavros/rc/in
+      type: mavros_msgs/RCIn
+      direction: output
+    attitude_setpoint:
+      topic: /mavros/setpoint_raw/attitude
+      type: mavros_msgs/AttitudeTarget
+      direction: input
+    local_position_setpoint:
+      topic: /mavros/setpoint_position/local
+      type: geometry_msgs/PoseStamped
+      direction: input
+
+  state_estimation:
+    odom_fast:
+      topic: /vins_fusion/imu_propagate
+      type: nav_msgs/Odometry
+      direction: output
+    odom:
+      topic: /vins_fusion/odometry
+      type: nav_msgs/Odometry
+      direction: output
+    path:
+      topic: /vins_fusion/path
+      type: nav_msgs/Path
+      direction: output
+    extrinsic:
+      topic: /vins_fusion/extrinsic
+      type: nav_msgs/Odometry
+      direction: output
+    image_track:
+      topic: /vins_fusion/image_track
+      type: sensor_msgs/Image
+      direction: output
+    point_cloud:
+      topic: /vins_fusion/point_cloud
+      type: sensor_msgs/PointCloud
+      direction: output
+    restart:
+      topic: /vins_restart
+      type: std_msgs/Bool
+      direction: input
+    imu_switch:
+      topic: /vins_imu_switch
+      type: std_msgs/Bool
+      direction: input
+    cam_switch:
+      topic: /vins_cam_switch
+      type: std_msgs/Bool
+      direction: input
+
+  planning:
+    goal:
+      topic: /planning/goal
+      type: geometry_msgs/PoseStamped
+      direction: input
+    goal_yaw_deg:
+      topic: /planning/goal_yaw_deg
+      type: std_msgs/Float64
+      direction: input
+    position_cmd:
+      topic: /position_cmd
+      type: quadrotor_msgs/PositionCommand
+      direction: output
+
+  control:
+    ego_position:
+      topic: /control/ego_position
+      type: geometry_msgs/PoseStamped
+      direction: input
+    direct_position:
+      topic: /control/position
+      type: geometry_msgs/PoseStamped
+      direction: input
+    spf_position:
+      topic: /control/spf_position
+      type: geometry_msgs/PoseStamped
+      direction: input
+    speed:
+      topic: /control/speed
+      type: geometry_msgs/TwistStamped
+      direction: input
+    stop:
+      topic: /control/stop
+      type: std_msgs/Empty
+      direction: input
+    interface_status:
+      topic: /control/interface_status
+      type: std_msgs/String
+      direction: output
+    ego_position_cmd:
+      topic: /control/ego_position_cmd
+      type: quadrotor_msgs/PositionCommand
+      direction: input
+    output_position_cmd:
+      topic: /control/position_cmd
+      type: quadrotor_msgs/PositionCommand
+      direction: output
+    takeoff_land:
+      topic: /px4ctrl/takeoff_land
+      type: quadrotor_msgs/TakeoffLand
+      direction: input
+    hover_yaw:
+      topic: /px4ctrl/hover_yaw_cmd
+      type: std_msgs/Float64
+      direction: input
+    traj_start_trigger:
+      topic: /traj_start_trigger
+      type: geometry_msgs/PoseStamped
+      direction: output
+    debug:
+      topic: /debugPx4ctrl
+      type: quadrotor_msgs/Px4ctrlDebug
+      direction: output
+
+  actuation:
+    tiplight_cmd:
+      topic: /actuation/tiplight_cmd
+      type: std_msgs/String
+      direction: input
+    tiplight_status:
+      topic: /status/tiplight
+      type: std_msgs/String
+      direction: output
+
+public_services:
+  mavros:
+    set_mode:
+      service: /mavros/set_mode
+      type: mavros_msgs/SetMode
+    arming:
+      service: /mavros/cmd/arming
+      type: mavros_msgs/CommandBool
+    command:
+      service: /mavros/cmd/command
+      type: mavros_msgs/CommandLong
+
+internal_topics:
+  ego_planner:
+    bspline:
+      topic: /drone_0_planning/bspline
+      type: traj_utils/Bspline
+    data_display:
+      topic: /drone_0_planning/data_display
+      type: traj_utils/DataDisp
+    broadcast_bspline:
+      topic: /broadcast_bspline
+      type: traj_utils/Bspline
+    swarm_trajs:
+      topic: /drone_0_planning/swarm_trajs
+      type: traj_utils/MultiBsplines
+
+gateway_mapping:
+  inbound:
+    set_goal: /planning/goal
+    ego_position: /control/ego_position
+    position: /control/position
+    speed: /control/speed
+    control_stop: /control/stop
+    set_yaw: /planning/goal_yaw_deg
+    takeoff_land: /px4ctrl/takeoff_land
+    tiplight: /actuation/tiplight_cmd
+  outbound:
+    state:
+      - /vins_fusion/imu_propagate
+      - /mavros/state
+      - /mavros/battery
+    controller_debug:
+      - /debugPx4ctrl
+      - /control/interface_status

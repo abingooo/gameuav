@@ -1,0 +1,5 @@
+<launch>
+  <arg name="vins_launch" default="$(find vins)/launch/fast_drone_250.launch"/>
+
+  <include file="$(arg vins_launch)"/>
+</launch>

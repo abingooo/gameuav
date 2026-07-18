@@ -1,0 +1,20 @@
+[Unit]
+Description=GameUAV local management agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=uav
+Group=uav
+WorkingDirectory=/home/uav/Desktop/uav_project/gameuav
+EnvironmentFile=/etc/gameuav/agent.env
+ExecStart=/usr/bin/python3 -m agent.uav_agent.server --host ${GAMEUAV_AGENT_HOST} --port ${GAMEUAV_AGENT_PORT} --uav-id ${GAMEUAV_UAV_ID} --config ${GAMEUAV_AGENT_CONFIG} --ros-command-config ${GAMEUAV_ROS_COMMAND_CONFIG} --workspace-root ${GAMEUAV_WORKSPACE} --log-dir ${GAMEUAV_AGENT_LOG_DIR} --ros-home ${GAMEUAV_ROS_HOME} --ros-log-dir ${GAMEUAV_ROS_LOG_DIR} --auth-token ${GAMEUAV_AGENT_TOKEN}
+Restart=always
+RestartSec=2
+KillMode=mixed
+KillSignal=SIGINT
+TimeoutStopSec=40
+
+[Install]
+WantedBy=multi-user.target

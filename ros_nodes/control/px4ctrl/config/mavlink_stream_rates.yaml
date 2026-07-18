@@ -1,0 +1,21 @@
+# PX4/MAVROS telemetry rates requested after MAVROS connects.
+#
+# These intervals mirror the old muav startup scripts:
+#   MAV_CMD_SET_MESSAGE_INTERVAL(511), HIGHRES_IMU(105), 4550 us
+#   MAV_CMD_SET_MESSAGE_INTERVAL(511), ATTITUDE_QUATERNION(31), 4550 us
+#
+# 4550 us is about 219.8 Hz. VINS and px4ctrl both consume /mavros/imu/data,
+# which depends on high-rate IMU and attitude MAVLink messages.
+streams:
+  - name: HIGHRES_IMU
+    message_id: 105
+    interval_us: 4550
+  - name: ATTITUDE_QUATERNION
+    message_id: 31
+    interval_us: 4550
+
+wait_for_connection: true
+connection_timeout: 30.0
+service_timeout: 30.0
+apply_attempts: 3
+retry_interval: 1.0

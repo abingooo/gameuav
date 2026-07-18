@@ -1,0 +1,60 @@
+flowchart TD
+  subgraph Sensors["Sensors"]
+    D435["Intel RealSense D435\nFW 5.17.3.10"]
+    USBRGB["RGB1 USB camera\n/dev/video0"]
+    PX4IMU["PX4 IMU\nvia MAVLink"]
+  end
+
+  subgraph Perception["Perception ROS nodes"]
+    Reset["gameuav_usb_camera/realsense_hw_reset\nprelaunch hardware reset"]
+    RSNode["realsense2_camera\nlaunch/bringup_realsense.launch"]
+    RGB1Node["usb_camera_node.py\nbringup_rgb1_camera.launch"]
+  end
+
+  subgraph Topics["Image / IMU topics"]
+    Infra1["/camera/infra1/image_rect_raw"]
+    Infra2["/camera/infra2/image_rect_raw"]
+    Depth["/camera/depth/image_rect_raw"]
+    Color["/camera/color/image_raw"]
+    RGB1["/rgb1/image_raw"]
+    Imu["/mavros/imu/data"]
+  end
+
+  subgraph Estimation["State estimation"]
+    WaitInputs["wait_for_vins_inputs.py\nstable input gate"]
+    VINS["VINS-Fusion\nfast_drone_250.launch"]
+    OdomFast["/vins_fusion/imu_propagate\nfast odometry"]
+    Odom["/vins_fusion/odometry"]
+    Tracks["/vins_fusion/image_track\n/vins_fusion/point_cloud"]
+  end
+
+  subgraph Streaming["HTTP camera streaming"]
+    CamGW["camera_stream_gateway\nMJPEG max 12 FPS"]
+    Browser["Ground-station browser"]
+  end
+
+  D435 --> Reset --> RSNode
+  RSNode --> Infra1
+  RSNode --> Infra2
+  RSNode --> Depth
+  RSNode --> Color
+  USBRGB --> RGB1Node --> RGB1
+  PX4IMU --> Imu
+
+  Infra1 --> WaitInputs
+  Infra2 --> WaitInputs
+  Imu --> WaitInputs
+  WaitInputs --> VINS
+  Infra1 --> VINS
+  Infra2 --> VINS
+  Imu --> VINS
+  VINS --> OdomFast
+  VINS --> Odom
+  VINS --> Tracks
+
+  Color --> CamGW
+  RGB1 --> CamGW
+  Depth -. optional .-> CamGW
+  Infra1 -. optional .-> CamGW
+  CamGW --> Browser
+
