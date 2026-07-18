@@ -3,10 +3,6 @@
 /devel/
 /install/
 /.catkin_tools/
-CMakeFiles/
-CMakeCache.txt
-cmake_install.cmake
-Makefile
 
 # Python environments and generated metadata
 .venv/
