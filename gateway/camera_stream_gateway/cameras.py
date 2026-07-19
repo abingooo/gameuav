@@ -335,7 +335,7 @@ class CameraManager:
         fps = max(0.5, min(MAX_STREAM_FPS, float(fps or 5.0)))
         period = 1.0 / fps
         boundary = b"--frame\r\n"
-        stream_key = stream_owner or "camera:%s" % camera_id
+        stream_key = (stream_owner or "camera", camera_id)
         stream_generation = self._next_stream_generation(stream_key)
 
         from tools.capture_ros_image import image_to_encoded_image
