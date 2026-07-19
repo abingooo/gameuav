@@ -92,7 +92,7 @@ Commissioning flights are not counted in the 110 scored trials.
    model metadata, and the operator abort path before arming. Hold the vehicle
    stationary through the preflight window and require the common control
    status to report `attitude_guard_ok=true`; any VINS/PX4 roll or pitch
-   disagreement above `5 deg` is a hard no-go, not a warning to waive.
+   disagreement above `15 deg` is a hard no-go, not a warning to waive.
 3. Run the exact Navigation prompt once with SPF and once with SMPF, one method
    enabled at a time. Abort and close the prior method gate before switching.
 4. After both Navigation paths complete safely, commission Obstacle Avoidance,

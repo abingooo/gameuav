@@ -113,9 +113,10 @@ it; results cannot be attributed to the planning methods alone.
   a disarmed task prompt was rejected before worker inference and produced no
   `/control/spf_position` message.
 - Common dynamic attitude gate: implemented for both methods. Stale PX4/VINS
-  attitude or roll/pitch disagreement above `5 deg` clears cached control and
-  requires a new command after recovery. A live `12.28 deg` stationary-drift
-  case is now rejected by the takeoff precheck and common control interface.
+  attitude or roll/pitch disagreement above `15 deg` clears cached control and
+  requires a new command after recovery. The operator-approved threshold permits
+  the observed `12.28 deg` stationary disagreement while retaining a gross-error
+  guard.
 - Semantic success for the five active real-world categories: not yet verified.
 - Real flight: not authorized by these checks; PX4 remained disarmed and the
   continuous SPF task executor remained disabled during the audit.

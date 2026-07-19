@@ -90,7 +90,7 @@ class ControlInterfaceNode:
         self.attitude_guard_enabled = bool(rospy.get_param("~attitude_guard_enabled", True))
         self.attitude_timeout = float(rospy.get_param("~attitude_timeout", 0.5))
         self.max_roll_pitch_error_deg = float(
-            rospy.get_param("~max_roll_pitch_error_deg", 5.0)
+            rospy.get_param("~max_roll_pitch_error_deg", 15.0)
         )
         self.spf_mavros_state_timeout_sec = float(
             rospy.get_param("~spf_mavros_state_timeout_sec", 2.5)

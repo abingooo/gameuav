@@ -5,7 +5,9 @@ import signal
 import shlex
 import socket
 import subprocess
+import threading
 import time
+import xmlrpc.client
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -16,6 +18,17 @@ VALID_MODULE_TYPES = {"process", "launch"}
 VALID_ARG_CHARS = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_./:-,+")
 DEFAULT_MAX_MODULE_LOG_BYTES = 64 * 1024 * 1024
 DEFAULT_RETAINED_LOG_TAIL_BYTES = 1024 * 1024
+
+
+class _TimeoutXmlRpcTransport(xmlrpc.client.Transport):
+    def __init__(self, timeout):
+        super().__init__()
+        self.timeout = float(timeout)
+
+    def make_connection(self, host):
+        connection = super().make_connection(host)
+        connection.timeout = self.timeout
+        return connection
 
 
 class ModuleConfigError(ValueError):
@@ -50,6 +63,7 @@ class LaunchManager:
     env_extra: dict = field(default_factory=dict)
     max_module_log_bytes: int = DEFAULT_MAX_MODULE_LOG_BYTES
     retained_log_tail_bytes: int = DEFAULT_RETAINED_LOG_TAIL_BYTES
+    _lifecycle_lock: object = field(default_factory=threading.RLock, init=False, repr=False)
 
     def __post_init__(self):
         self.workspace_root = os.path.abspath(self.workspace_root)
@@ -186,7 +200,7 @@ class LaunchManager:
                 raise ModuleRuntimeError("invalid process command for %s" % name)
             return [str(part) for part in command]
 
-        command = ["roslaunch"]
+        command = ["roslaunch", "--wait"]
         if config.get("file"):
             command.append(config["file"])
         else:
@@ -275,117 +289,191 @@ class LaunchManager:
             self._wait_for_ros_master()
             return
         self.start("roscore")
-        self._wait_for_ros_master()
+
+    def _ros_master_run_id(self, timeout=0.5):
+        try:
+            proxy = xmlrpc.client.ServerProxy(
+                self.ros_master_uri,
+                transport=_TimeoutXmlRpcTransport(timeout),
+                allow_none=True,
+            )
+            code, _message, value = proxy.getParam("/gameuav_agent", "/run_id")
+        except (OSError, ValueError, xmlrpc.client.Error):
+            return None
+        try:
+            success = int(code) == 1
+        except (TypeError, ValueError):
+            return None
+        if not success or not value:
+            return None
+        return str(value)
 
     def _wait_for_ros_master(self, timeout=5.0):
-        deadline = time.time() + float(timeout)
-        while time.time() < deadline:
-            if self.is_ros_master_reachable(timeout=0.2):
-                return
-            time.sleep(0.1)
+        deadline = time.monotonic() + float(timeout)
+        stable_run_id = None
+        stable_since = None
+        while time.monotonic() < deadline:
+            roscore = self._refresh_status("roscore")
+            if roscore is not None and roscore.status != "running":
+                raise ModuleRuntimeError(
+                    "roscore exited before ROS master became ready: returncode=%s log=%s"
+                    % (roscore.last_returncode, roscore.log_path)
+                )
+
+            remaining = max(0.05, deadline - time.monotonic())
+            run_id = self._ros_master_run_id(timeout=min(0.2, remaining))
+            sampled_at = time.monotonic()
+            if run_id:
+                if run_id != stable_run_id:
+                    stable_run_id = run_id
+                    stable_since = sampled_at
+                elif stable_since is not None and sampled_at - stable_since >= 0.2:
+                    return run_id
+            else:
+                stable_run_id = None
+                stable_since = None
+            time.sleep(0.05)
+
         raise ModuleRuntimeError(
-            "roscore did not become reachable at %s within %.1fs" % (self.ros_master_uri, timeout)
+            "ROS master did not expose a stable /run_id at %s within %.1fs"
+            % (self.ros_master_uri, timeout)
         )
 
     def start(self, name, args=None):
-        config = self._module_config(name)
-        current = self._refresh_status(name)
-        if current and current.status == "running":
-            return self.status(name)
+        with self._lifecycle_lock:
+            config = self._module_config(name)
+            current = self._refresh_status(name)
+            if current and current.status == "running":
+                return self.status(name)
+            if name == "roscore":
+                external_run_id = self._ros_master_run_id(timeout=0.2)
+                if external_run_id:
+                    raise ModuleRuntimeError(
+                        "ROS master is already running outside this agent at %s: run_id=%s"
+                        % (self.ros_master_uri, external_run_id)
+                    )
 
-        command = self._build_command(name, config, args)
-        self._ensure_roscore_for_launch(name, config)
-        timestamp = time.strftime("%Y%m%d_%H%M%S")
-        log_path = os.path.join(self.log_dir, "%s_%s.log" % (name, timestamp))
-        Path(os.path.dirname(log_path)).mkdir(parents=True, exist_ok=True)
+            command = self._build_command(name, config, args)
+            self._ensure_roscore_for_launch(name, config)
+            timestamp = time.strftime("%Y%m%d_%H%M%S")
+            log_path = os.path.join(self.log_dir, "%s_%s.log" % (name, timestamp))
+            Path(os.path.dirname(log_path)).mkdir(parents=True, exist_ok=True)
 
-        log_file = open(log_path, "ab", buffering=0)
-        try:
-            self._run_pre_start(name, config, args, log_file)
-        except Exception:
+            log_file = open(log_path, "ab", buffering=0)
+            try:
+                self._run_pre_start(name, config, args, log_file)
+            except Exception:
+                log_file.close()
+                raise
+
+            proc = subprocess.Popen(
+                ["/bin/bash", "-lc", self._shell_command(command)],
+                cwd=self.workspace_root,
+                stdout=log_file,
+                stderr=subprocess.STDOUT,
+                env=self._build_env(),
+                preexec_fn=os.setsid,
+                close_fds=True,
+            )
             log_file.close()
-            raise
 
-        proc = subprocess.Popen(
-            ["/bin/bash", "-lc", self._shell_command(command)],
-            cwd=self.workspace_root,
-            stdout=log_file,
-            stderr=subprocess.STDOUT,
-            env=self._build_env(),
-            preexec_fn=os.setsid,
-            close_fds=True,
-        )
-        log_file.close()
-
-        self.processes[name] = ModuleProcess(
-            name=name,
-            process=proc,
-            command=command,
-            log_path=log_path,
-            started_at=time.time(),
-        )
-        return self.status(name)
+            self.processes[name] = ModuleProcess(
+                name=name,
+                process=proc,
+                command=command,
+                log_path=log_path,
+                started_at=time.time(),
+            )
+            if name == "roscore":
+                try:
+                    self._wait_for_ros_master()
+                except Exception:
+                    self.stop(name, timeout=2.0)
+                    raise
+            return self.status(name)
 
     def autostart(self):
-        results = {}
-        for name, config in self.modules.items():
-            if not config.get("autostart", False):
+        with self._lifecycle_lock:
+            names = [name for name, config in self.modules.items() if config.get("autostart", False)]
+            if "roscore" in names:
+                names.remove("roscore")
+                names.insert(0, "roscore")
+            return {name: self.start(name) for name in names}
+
+    def _running_roscore_dependents(self):
+        dependents = []
+        for module_name, config in self.modules.items():
+            if module_name == "roscore" or config.get("type") != "launch":
                 continue
-            results[name] = self.start(name)
-        return results
+            if not config.get("requires_roscore", True):
+                continue
+            status = self._refresh_status(module_name)
+            if status is not None and status.status == "running":
+                dependents.append(module_name)
+        return sorted(dependents)
 
     def stop(self, name, timeout=8.0):
-        self._module_config(name)
-        proc_info = self._refresh_status(name)
-        if not proc_info:
-            return {
-                "module": name,
-                "status": "stopped",
-                "pid": None,
-                "detail": "not started by agent",
-            }
-        if proc_info.status != "running":
+        with self._lifecycle_lock:
+            self._module_config(name)
+            proc_info = self._refresh_status(name)
+            if not proc_info:
+                return {
+                    "module": name,
+                    "status": "stopped",
+                    "pid": None,
+                    "detail": "not started by agent",
+                }
+            if proc_info.status != "running":
+                return self.status(name)
+            if name == "roscore":
+                dependents = self._running_roscore_dependents()
+                if dependents:
+                    raise ModuleRuntimeError(
+                        "cannot stop roscore while ROS launch modules are running: %s"
+                        % ", ".join(dependents)
+                    )
+
+            pgid = os.getpgid(proc_info.process.pid)
+            os.killpg(pgid, signal.SIGINT)
+            deadline = time.time() + timeout
+            while time.time() < deadline:
+                if proc_info.process.poll() is not None:
+                    return self.status(name)
+                time.sleep(0.1)
+
+            os.killpg(pgid, signal.SIGTERM)
+            deadline = time.time() + 3.0
+            while time.time() < deadline:
+                if proc_info.process.poll() is not None:
+                    return self.status(name)
+                time.sleep(0.1)
+
+            os.killpg(pgid, signal.SIGKILL)
             return self.status(name)
 
-        pgid = os.getpgid(proc_info.process.pid)
-        os.killpg(pgid, signal.SIGINT)
-        deadline = time.time() + timeout
-        while time.time() < deadline:
-            if proc_info.process.poll() is not None:
-                return self.status(name)
-            time.sleep(0.1)
-
-        os.killpg(pgid, signal.SIGTERM)
-        deadline = time.time() + 3.0
-        while time.time() < deadline:
-            if proc_info.process.poll() is not None:
-                return self.status(name)
-            time.sleep(0.1)
-
-        os.killpg(pgid, signal.SIGKILL)
-        return self.status(name)
-
     def restart(self, name, args=None):
-        self.stop(name)
-        return self.start(name, args)
+        with self._lifecycle_lock:
+            self.stop(name)
+            return self.start(name, args)
 
     def stop_all(self, timeout=8.0):
-        names = list(reversed(self.processes))
-        if "roscore" in names:
-            names.remove("roscore")
-            names.append("roscore")
+        with self._lifecycle_lock:
+            names = list(reversed(self.processes))
+            if "roscore" in names:
+                names.remove("roscore")
+                names.append("roscore")
 
-        results = {}
-        for name in names:
-            try:
-                results[name] = self.stop(name, timeout=timeout)
-            except (ModuleRuntimeError, OSError) as exc:
-                results[name] = {
-                    "module": name,
-                    "status": "error",
-                    "detail": str(exc),
-                }
-        return results
+            results = {}
+            for name in names:
+                try:
+                    results[name] = self.stop(name, timeout=timeout)
+                except (ModuleRuntimeError, OSError) as exc:
+                    results[name] = {
+                        "module": name,
+                        "status": "error",
+                        "detail": str(exc),
+                    }
+            return results
 
     def status(self, name=None):
         if name is None:

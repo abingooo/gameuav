@@ -5,6 +5,7 @@
 modules:
   roscore:
     type: process
+    autostart: true
     description: ROS master
     command:
       - roscore

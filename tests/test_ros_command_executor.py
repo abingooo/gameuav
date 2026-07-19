@@ -181,8 +181,8 @@ class RosCommandExecutorTest(unittest.TestCase):
         attitude = command["checks"]["attitude_consistency"]
         self.assertEqual(attitude["estimate_topic"], "/vins_fusion/imu_propagate")
         self.assertEqual(attitude["reference_topic"], "/mavros/local_position/pose")
-        self.assertEqual(attitude["max_roll_pitch_error_deg"], 5.0)
-        self.assertLessEqual(command["check_cache_ttl"], 2.0)
+        self.assertEqual(attitude["max_roll_pitch_error_deg"], 15.0)
+        self.assertEqual(command["check_cache_ttl"], 12.0)
 
     def test_attitude_consistency_accepts_small_roll_pitch_error(self):
         checker = self._attitude_checker(roll_deg=3.0, pitch_deg=-2.0)

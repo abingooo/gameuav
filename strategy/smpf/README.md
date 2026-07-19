@@ -127,7 +127,7 @@ and armed PX4 state, fresh VINS odometry, minimum start altitude, and a bounded
 enable-time speed. Disarming closes execution immediately. Dry-run tasks publish
 verified plans on `/smpf/dry_run_plan` and status on `/smpf/status`.
 The shared control interface independently requires fresh PX4 and VINS
-attitudes with roll/pitch disagreement no greater than `5 deg`. A violation
+attitudes with roll/pitch disagreement no greater than `15 deg`. A violation
 clears cached motion and requires a new command after recovery, so neither SMPF
 nor SPF can continue an old route after estimator drift.
 

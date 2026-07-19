@@ -2,8 +2,11 @@ import os
 import socket
 import sys
 import signal
+import threading
+import time
 import unittest
 import yaml
+from unittest.mock import patch
 
 from agent.launch_manager.manager import LaunchManager, ModuleRuntimeError
 
@@ -17,14 +20,16 @@ def write_config(path):
                     sys.executable,
                     "-c",
                     (
-                        "import os,signal,socket,time;"
+                        "import os,signal,sys,time;"
+                        "from xmlrpc.server import SimpleXMLRPCServer;"
                         "uri=os.environ.get('ROS_MASTER_URI','http://localhost:11311');"
                         "host_port=uri.split('://',1)[-1].split('/',1)[0];"
                         "host,port=(host_port.rsplit(':',1) if ':' in host_port else ('localhost','11311'));"
-                        "sock=socket.socket(); sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1);"
-                        "sock.bind((host, int(port))); sock.listen(1);"
-                        "signal.signal(signal.SIGINT, lambda s,f: exit(0));"
-                        "time.sleep(60)"
+                        "ready_at=time.monotonic()+0.25;"
+                        "server=SimpleXMLRPCServer((host,int(port)),logRequests=False,allow_none=True);"
+                        "server.register_function(lambda caller,key: [1,'run_id','test-run-id'] if time.monotonic() >= ready_at else [-1,'not ready',0], 'getParam');"
+                        "signal.signal(signal.SIGINT, lambda s,f: sys.exit(0));"
+                        "server.serve_forever()"
                     ),
                 ],
             },
@@ -126,10 +131,33 @@ class LaunchManagerTest(unittest.TestCase):
             stopped = manager.stop("auto_sleepy", timeout=2.0)
             self.assertEqual(stopped["status"], "exited")
 
+    def test_autostart_orders_roscore_before_launch_modules(self):
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as tmp:
+            manager = self.make_manager(Path(tmp))
+            manager.modules["roscore"]["autostart"] = True
+            manager.modules["fake_launch"]["autostart"] = True
+            manager.modules = {
+                "fake_launch": manager.modules["fake_launch"],
+                "auto_sleepy": manager.modules["auto_sleepy"],
+                "roscore": manager.modules["roscore"],
+                **{
+                    name: config
+                    for name, config in manager.modules.items()
+                    if name not in {"fake_launch", "auto_sleepy", "roscore"}
+                },
+            }
+
+            results = manager.autostart()
+
+            self.assertEqual(next(iter(results)), "roscore")
+            manager.stop_all(timeout=2.0)
+
     def test_stop_all_stops_roscore_last(self):
         import tempfile
         from pathlib import Path
-        from unittest.mock import patch
 
         with tempfile.TemporaryDirectory() as tmp:
             manager = self.make_manager(Path(tmp))
@@ -149,6 +177,32 @@ class LaunchManagerTest(unittest.TestCase):
             self.assertEqual(stop_order[-1], "roscore")
             self.assertEqual(set(results), {"roscore", "sleepy", "auto_sleepy"})
             self.assertTrue(all(result["status"] == "exited" for result in results.values()))
+
+    def test_roscore_start_waits_for_stable_run_id(self):
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as tmp:
+            manager = self.make_manager(Path(tmp))
+            started_at = time.monotonic()
+
+            started = manager.start("roscore")
+
+            self.assertEqual(started["status"], "running")
+            self.assertGreaterEqual(time.monotonic() - started_at, 0.2)
+            manager.stop("roscore", timeout=2.0)
+
+    def test_refuses_to_start_roscore_over_external_master(self):
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as tmp:
+            manager = self.make_manager(Path(tmp))
+            with patch.object(manager, "_ros_master_run_id", return_value="external-run-id"):
+                with self.assertRaisesRegex(ModuleRuntimeError, "outside this agent"):
+                    manager.start("roscore")
+
+            self.assertEqual(manager.status("roscore")["status"], "stopped")
 
     def test_reject_unknown_module(self):
         import tempfile
@@ -186,7 +240,7 @@ class LaunchManagerTest(unittest.TestCase):
             command = manager._build_command(
                 "fake_launch", manager.modules["fake_launch"], {"mode": "test"}
             )
-            self.assertEqual(command, ["roslaunch", "launch/fake.launch", "mode:=test"])
+            self.assertEqual(command, ["roslaunch", "--wait", "launch/fake.launch", "mode:=test"])
 
             pre_start = manager._build_pre_start_command(
                 "fake_launch", manager.modules["fake_launch"], {"mode": "test"}
@@ -208,6 +262,57 @@ class LaunchManagerTest(unittest.TestCase):
             self.assertEqual(stopped["status"], "exited")
             self.assertEqual(manager.status("roscore")["status"], "running")
 
+            manager.stop("roscore", timeout=2.0)
+
+    def test_refuses_to_stop_roscore_while_launch_is_running(self):
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as tmp:
+            manager = self.make_manager(Path(tmp))
+            manager.start("fake_launch")
+
+            with self.assertRaisesRegex(ModuleRuntimeError, "fake_launch"):
+                manager.stop("roscore", timeout=2.0)
+
+            manager.stop("fake_launch", timeout=2.0)
+            manager.stop("roscore", timeout=2.0)
+
+    def test_concurrent_start_is_idempotent(self):
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as tmp:
+            manager = self.make_manager(Path(tmp))
+            manager.start("roscore")
+            original_pre_start = manager._run_pre_start
+            barrier = threading.Barrier(3)
+            results = []
+            errors = []
+
+            def slow_pre_start(*args, **kwargs):
+                time.sleep(0.15)
+                return original_pre_start(*args, **kwargs)
+
+            def start_launch():
+                barrier.wait()
+                try:
+                    results.append(manager.start("fake_launch"))
+                except Exception as exc:
+                    errors.append(exc)
+
+            threads = [threading.Thread(target=start_launch) for _ in range(2)]
+            with patch.object(manager, "_run_pre_start", side_effect=slow_pre_start):
+                for thread in threads:
+                    thread.start()
+                barrier.wait()
+                for thread in threads:
+                    thread.join(timeout=5.0)
+
+            self.assertFalse(errors)
+            self.assertEqual(len(results), 2)
+            self.assertEqual(results[0]["pid"], results[1]["pid"])
+            manager.stop("fake_launch", timeout=2.0)
             manager.stop("roscore", timeout=2.0)
 
     def test_failed_pre_start_prevents_module_start(self):

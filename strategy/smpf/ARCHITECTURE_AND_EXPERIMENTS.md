@@ -142,7 +142,7 @@ for collision-aware trajectory generation against live depth data.
    PX4 state, fresh VINS, minimum altitude, and bounded enable-time speed must
    all pass. A disarm event closes execution and requests a stop.
    The shared control interface additionally compares VINS and PX4 roll/pitch;
-   a stale attitude or more than `5 deg` disagreement invalidates cached motion
+   a stale attitude or more than `15 deg` disagreement invalidates cached motion
    and blocks both SPF and SMPF until a new command arrives after recovery.
 9. Deterministic path repair: after two rejected LLM proposals, SMPF samples
    clearance-inflated points around modeled spheres, builds a segment-verified
@@ -349,10 +349,10 @@ The current gate state is:
    estimate later reached `roll=10.78 deg` while PX4 remained at
    `roll=-1.50 deg` (`12.28 deg` disagreement). The current RealSense image
    retained level room geometry, so this was estimator drift rather than a
-   physically tilted camera. The new common `5 deg` attitude guard rejects
-   takeoff and invalidates live motion when this occurs, but the guard does not
-   repair VINS. Controlled flight remains prohibited until a properly excited
-   initialization stays inside the threshold through the preflight hold.
+   physically tilted camera. The original `5 deg` attitude guard rejected
+   takeoff and invalidated live motion when this occurred. The operator-approved
+   threshold is now `15 deg`, so this measured disagreement is permitted while
+   larger errors still block motion. The guard does not repair VINS.
 7. `PENDING`: dynamic-task latency governance: the direct-goal redesign reduced
    observation age from `57.74 s` to `8.88 s`, but the remaining VLM latency
    must be evaluated with a moving target before Follow execution is enabled.

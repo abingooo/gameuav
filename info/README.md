@@ -10,4 +10,6 @@ Render the `.mmd` files with any Mermaid renderer, or paste them into a Markdown
 - `03_perception_state_estimation.mmd`: cameras, MAVROS IMU, VINS, and image streaming.
 - `04_planning_mission.mmd`: EGO planner and See-Point-Fly mission path.
 - `05_control_takeoff.mmd`: px4ctrl VINS-only control and takeoff/land flow.
-
+- `06_spf_smpf_six_tasks.md`: code-level SPF/SMPF implementation, completion semantics,
+  and verification boundaries for Navigation, Obstacle Avoidance, Long-Horizon,
+  Reasoning, Search, and Follow.

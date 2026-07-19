@@ -64,6 +64,7 @@ def reboot_fcu(args):
 
     command = [
         "roslaunch",
+        "--wait",
         "launch/bringup_mavros.launch",
         "fcu_url:=%s" % args.fcu_url,
         "configure_stream_rates:=false",

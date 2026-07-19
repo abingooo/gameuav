@@ -240,7 +240,7 @@ safe_land
 
 只有这里列出的模块才能被 agent 启动、停止、重启和查询。
 
-模块可设置 `autostart: true`。agent 进程启动时会自动启动这些模块；未设置该字段的模块仍保持按需启动。
+模块可设置 `autostart: true`。agent 进程启动时会自动启动这些模块；未设置该字段的模块仍保持按需启动。当前 `roscore` 和 `rgb1_camera` 都会自动启动，且 agent 总是先等待 ROS master 的 `/run_id` 稳定，再启动相机或其他 `roslaunch` 模块。所有受管 `roslaunch` 都使用 `--wait`，不会自行创建第二个 ROS master。
 
 ## 7. 传递 launch 参数
 
@@ -648,7 +648,9 @@ SIGTERM
 SIGKILL
 ```
 
-也就是说，它会先尽量让 `roslaunch` 正常退出，超时后再强制停止。
+也就是说，它会先尽量让 `roslaunch` 正常退出，超时后再强制停止。存在运行中的 ROS launch 模块时，单独停止或重启 `roscore` 会被拒绝；`stop_all` 会先停止这些依赖模块，最后停止 `roscore`。
+
+重启 `gameuav-agent.service` 属于整个受管栈的重启，会依次停止 `egoctrl`、RGB1 和 `roscore`。只需重启单个算法或相机时，应通过 `agentctl.py restart <module>` 操作对应模块。
 
 ## 12. TCP 协议格式
 
