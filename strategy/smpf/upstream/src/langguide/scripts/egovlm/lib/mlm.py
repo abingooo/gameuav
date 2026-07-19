@@ -2,7 +2,6 @@ import cv2
 import json
 import time
 import base64
-import os
 import requests
 
 
@@ -12,7 +11,8 @@ class LLM:
     使用POST请求方式调用API
     """
     
-    def __init__(self, model_id="gpt-5.2", api_key=None, base_url=None):
+    def __init__(self, model_id="gpt-5.2", api_key="sk-zk26f90a8ef46c6589207af1a58b11c4e4a68eca448256d6",
+                 base_url="https://api.zhizengzeng.com/v1/chat/completions"):
         """
         初始化语言模型
         
@@ -22,19 +22,8 @@ class LLM:
             base_url: API基础URL
         """
         self.model_id = model_id
-        self.api_key = (
-            api_key
-            or os.environ.get("SMPF_LLM_API_KEY")
-            or os.environ.get("OPENAI_API_KEY", "")
-        )
-        self.base_url = (
-            base_url
-            or os.environ.get("SMPF_LLM_BASE_URL")
-            or os.environ.get("OPENAI_BASE_URL")
-            or "https://api.zhizengzeng.com/v1/chat/completions"
-        )
-        if not self.api_key:
-            raise ValueError("Missing SMPF_LLM_API_KEY or OPENAI_API_KEY")
+        self.api_key = api_key
+        self.base_url = base_url
     
     def generate_text(self, prompt, temperature=0.5, verbose=False):
         """
@@ -142,7 +131,8 @@ class VLM:
     使用POST请求方式调用API
     """
     
-    def __init__(self, model_id="gemini-2.5-flash", api_key=None, base_url=None):
+    def __init__(self, model_id="gemini-2.5-flash", api_key="sk-zk26f90a8ef46c6589207af1a58b11c4e4a68eca448256d6",
+                 base_url="https://api.zhizengzeng.com/google/v1beta/models/"):
         """
         初始化视觉语言模型
         
@@ -152,20 +142,8 @@ class VLM:
             base_url: API基础URL
         """
         self.model_id = model_id
-        self.api_key = (
-            api_key
-            or os.environ.get("SMPF_VLM_API_KEY")
-            or os.environ.get("GOOGLE_API_KEY")
-            or os.environ.get("OPENAI_API_KEY", "")
-        )
-        base_url = (
-            base_url
-            or os.environ.get("SMPF_VLM_BASE_URL")
-            or "https://api.zhizengzeng.com/google/v1beta/models/"
-        )
-        if not self.api_key:
-            raise ValueError("Missing SMPF_VLM_API_KEY, GOOGLE_API_KEY, or OPENAI_API_KEY")
-        self.base_url = f"{base_url}{model_id}:generateContent?key={self.api_key}"
+        self.api_key = api_key
+        self.base_url = f"{base_url}{model_id}:generateContent?key={api_key}"
     
     def prepare_image(self, rgb_image, jpeg_quality=60):
         """
@@ -433,7 +411,7 @@ if __name__ == "__main__":
             # 创建LLM实例
             llm = LLM(
                 model_id="gpt-4o-mini",
-                api_key="",
+                api_key="sk-zk26f90a8ef46c6589207af1a58b11c4e4a68eca448256d6",
                 base_url="https://api.zhizengzeng.com/v1/chat/completions"
             )
             
@@ -454,7 +432,7 @@ if __name__ == "__main__":
             # 创建VLM实例
             vlm = VLM(
                 model_id="gemini-2.0-flash",
-                api_key="",
+                api_key="sk-zk26f90a8ef46c6589207af1a58b11c4e4a68eca448256d6",
                 base_url="https://api.zhizengzeng.com/google/v1beta/models/"
             )
             

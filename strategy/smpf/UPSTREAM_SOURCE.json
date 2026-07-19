@@ -17,7 +17,6 @@
     "all non-SMPF legacy workspace components"
   ],
   "local_modifications": [
-    "removed committed API credential values",
-    "added environment-variable credential loading"
+    "guide_module/guide_vlm/lib/SAM.py accepts environment overrides for the deployed SAM host, port, and timeout"
   ]
 }

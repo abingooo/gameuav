@@ -18,7 +18,7 @@
   },
   "modelinfo": {
     "BASE_URL": "https://api.zhizengzeng.com/v1",
-    "OPENAIKEY": ""
+    "OPENAIKEY": "sk-zk26f90a8ef46c6589207af1a58b11c4e4a68eca448256d6"
   },
   "taskparam": {
     "public": "",

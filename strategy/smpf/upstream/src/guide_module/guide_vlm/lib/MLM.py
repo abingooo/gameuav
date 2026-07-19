@@ -73,27 +73,15 @@ class LLM:
         info = load_model_info()
         self.model_id = model_id or info.get("model_id", "gpt-4o-mini")
         self.model_dsp = model_dsp or info.get("model_dsp", "")
-        # Environment variables override the imported compatibility config.
-        self.api_key = (
-            api_key
-            or os.environ.get("SMPF_LLM_API_KEY")
-            or os.environ.get("OPENAI_API_KEY")
-            or info.get("openaikey")
-            or info.get("OPENAIKEY")
-            or ""
-        )
-        config_base = (
-            os.environ.get("SMPF_LLM_BASE_URL")
-            or os.environ.get("OPENAI_BASE_URL")
-            or info.get("base_url")
-            or info.get("BASE_URL")
-        )
+        # 兼容大小写键名
+        self.api_key = api_key or info.get("openaikey") or info.get("OPENAIKEY") or ""
+        config_base = info.get("base_url") or info.get("BASE_URL")
         self.base_url = base_url or config_base or ""
         # 确保指向 chat/completions 端点
         if self.base_url and "/chat/completions" not in self.base_url:
             self.base_url = self.base_url.rstrip("/") + "/chat/completions"
         if not self.api_key:
-            raise ValueError("Missing SMPF_LLM_API_KEY or OPENAI_API_KEY")
+            raise ValueError("缺少 API Key，请在 config/modelinfo.json 设置 openaikey/OPENAIKEY 或在构造时传入 api_key。")
         if not self.base_url:
             raise ValueError("缺少 base_url，请在 config/modelinfo.json 设置 base_url/BASE_URL 或在构造时传入 base_url。")
 
@@ -203,20 +191,8 @@ class VLM:
         info = load_model_info()
         self.model_id = model_id or info.get("vlm_model_id", "vlm-model")
         self.model_dsp = model_dsp or info.get("vlm_model_dsp", "")
-        self.api_key = (
-            api_key
-            or os.environ.get("SMPF_VLM_API_KEY")
-            or os.environ.get("OPENAI_API_KEY")
-            or info.get("openaikey")
-            or info.get("OPENAIKEY")
-            or ""
-        )
-        config_base = (
-            os.environ.get("SMPF_VLM_BASE_URL")
-            or os.environ.get("OPENAI_BASE_URL")
-            or info.get("base_url")
-            or info.get("BASE_URL")
-        )
+        self.api_key = api_key or info.get("openaikey") or info.get("OPENAIKEY") or ""
+        config_base = info.get("base_url") or info.get("BASE_URL")
         self.base_url = base_url or config_base or ""
         if not self.base_url:
             raise ValueError("缺少 base_url，请在 config/modelinfo.json 设置 base_url/BASE_URL 或在构造时传入 base_url。")
