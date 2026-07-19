@@ -39,9 +39,16 @@ queueing, image encoding, SPF parsing, and log generation.
 
 ## Compatibility Note
 
-`gemini-3.5-flash` sometimes omits the optional `label` field while returning a
-valid `point` and `depth`. The SPF Tello action parser now treats `label` as
-optional and continues using the returned spatial data.
+`gemini-3.5-flash` sometimes omitted the `label` field in an earlier trial while
+returning a point and depth. The synchronized author parser requires `label`, so
+such a response is rejected rather than repaired locally. This preserves the
+released SPF response contract.
+
+The author supplementary material reports Gemini 2.0 Flash for the paper
+experiments, and the current released repository defaults to Gemini 2.5 Flash
+when no custom model is configured. `gemini-3.5-flash` is the user-selected
+model for the local SPF/SMPF comparison; results using it are not paper-model
+reproduction results.
 
 ## Gemini Comparison (2026-07-15)
 

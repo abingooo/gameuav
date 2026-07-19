@@ -7,6 +7,8 @@
   <arg name="start_realsense" default="true"/>
   <arg name="start_vins" default="true"/>
   <arg name="enable_realsense_color" default="true"/>
+  <arg name="realsense_enable_sync" default="false"/>
+  <arg name="realsense_align_depth" default="false"/>
   <arg name="configure_mavros_stream_rates" default="true"/>
 
   <group if="$(arg start_mavros)">
@@ -22,6 +24,8 @@
       <arg name="serial_no" value="$(arg camera_serial_no)"/>
       <arg name="usb_port_id" value="$(arg camera_usb_port_id)"/>
       <arg name="enable_color" value="$(arg enable_realsense_color)"/>
+      <arg name="enable_sync" value="$(arg realsense_enable_sync)"/>
+      <arg name="align_depth" value="$(arg realsense_align_depth)"/>
     </include>
   </group>
 

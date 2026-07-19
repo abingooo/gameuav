@@ -29,6 +29,8 @@ core
 core.*
 /runtime/*.csv
 /runtime/spf_model_benchmark_*.json
+/runtime/smpf_trials*.jsonl
+/runtime/spf_smpf_outcomes*.jsonl
 /runtime/realsense_firmware/
 
 # Local credentials and overrides

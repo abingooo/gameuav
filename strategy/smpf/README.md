@@ -24,29 +24,121 @@ actuation, and gateways on the UAV.
   prototype and is not flight-ready as imported.
 - `UPSTREAM_SOURCE.json`: machine-readable source and selection record.
 - `env.example`: credential variable names without secrets.
+- `runtime/`: calibrated geometry, strict model/SAM contracts, stable-ID scene
+  memory, task stages, visibility-graph repair, execution state, and experiment
+  logging.
+- `experiments/`: fixed SPF paper task manifest and shared outcome tools.
+  See `experiments/README.md` for the two-scope comparison runbook.
 
-## Local Safety Changes
+## Local Integration Changes
 
-The upstream branch contained API credentials in source/configuration. This
-import removes those values and gives environment variables priority. The
-algorithm, prompts, and planning behavior are otherwise unchanged.
+The selected legacy source remains byte-identical to `muavold/dev` except that
+the imported SAM client accepts environment overrides for its deployment host,
+port, and timeout. The active GameUAV runtime gives `SMPF_*` environment
+variables priority and does not expose credential values in ROS status or logs.
+The legacy import is retained for private source provenance and is not the
+flight-runtime authority.
 
 Required variables depend on the selected model endpoint:
 
 ```bash
 export SMPF_LLM_API_KEY=...
 export SMPF_LLM_BASE_URL=...
+export SMPF_LLM_MODEL=gpt-5.2
+export SMPF_LLM_REASONING_EFFORT=low
 export SMPF_VLM_API_KEY=...
 export SMPF_VLM_BASE_URL=...
+export SMPF_VLM_MODEL=gemini-3.5-flash
+export SMPF_SAM_HOST=10.246.1.94
+export SMPF_SAM_PORT=5002
+export SMPF_SAM_TIMEOUT_SEC=20
 ```
 
 `OPENAI_API_KEY`, `OPENAI_BASE_URL`, and `GOOGLE_API_KEY` remain supported as
 fallbacks where applicable.
 
+The ROS bridge prefers the `SMPF_*` environment variables. For compatibility
+with the current private deployment, it can read the local upstream
+`guide_module/config/config.json` only when those variables are unset. It never
+publishes credential values in ROS status or logs.
+
 ## Integration Status
 
-This directory is an upstream source import, not an enabled flight module. Do
-not source or build the complete historical `muavold` workspace. The next
-integration step is to adapt validated SMPF guidepoints to GameUAV's existing
-`/control/ego_position` or `/planning/goal` interface while keeping EGO and
-px4ctrl in their current UAV-side packages.
+The flight-independent code under `runtime/` contains calibrated RGB-D
+geometry, deterministic path validation, semantic scene memory, and a typed
+SAM client. The active defaults use `gemini-3.5-flash` for visual grounding and
+`gpt-5.2` for guidepoint planning and long-horizon stage decomposition. Model
+requests use the explicit `low` reasoning effort by default; the selected effort
+is included in status, dry-run plans, and experiment events.
+Model planning uses the single `body_flu` convention (`x` forward,
+`y` left, `z` up), an exact JSON contract, and mandatory point-and-segment
+validation. A visual schema failure may trigger one corrected regeneration, but
+the same strict parser still decides acceptance. Two invalid model paths trigger
+a deterministic sphere visibility
+graph and A* repair over bounded target-standoff candidates; this result must
+pass the same verifier. Long-horizon
+stages retain completed target IDs so `the next` cannot silently reuse the same
+entity. A safe path is accepted as task-complete only when its endpoint lies in
+the configured target standoff band, makes progress, and has verified line of
+sight to the target. Follow does not call the LLM or generate a guidepoint
+path. The VLM supplies only a discriminative label; the bridge then atomically
+reads a newer synchronized RGB-D frame, latest VINS odometry, and accepted
+extrinsics. That metric frame must remain at most `1.0 s` old and within
+`0.08 s` of odometry. One full-image target SAM call must return at least one
+mask. When SAM returns several masks, SMPF deterministically selects the one
+with the largest reported pixel area (the first wins an equal-area tie). Its
+aligned depth produces one free 3-D point `0.15 m` outside the target safety
+sphere, which is checked again for freshness before EGO publication. Zero masks
+or expiry abort and stop the cycle. This is discrete
+re-detection, not a tracker or predictor. For a person
+sphere near `0.85-1.00 m`, this is approximately a `1.00-1.15 m` center
+distance. The primary method submits the complete standoff point; an optional
+`0.50 m` cap is retained only as the `smpf_bounded_follow_goal` ablation. Follow performs a
+final observation before returning success or timeout. Accepted goals use
+deterministic target-facing yaw, and
+arrival waits for yaw convergence as well as position and speed. A missing SAM
+mask for the target still fails closed. A missing mask for an optional obstacle
+falls back to its complete VLM box and aligned depth, producing a conservative
+sphere that remains subject to corridor and path verification. The SAM client
+defaults to `10.246.1.94:5002`; the variables above
+allow deployment-specific overrides. `smpf_bridge` synchronizes aligned RGB-D,
+combines live VINS and RealSense extrinsics, supports ordered long-horizon
+stages and explicit obstacle spheres, and routes only verified world goals to
+`/control/ego_position`.
+
+Navigation, Obstacle Avoidance, and Reasoning do not inherit Follow's `1.0 s`
+completion gate. Long Horizon snapshots a newer image after initial stage
+decomposition before invoking the VLM.
+
+Visible obstacle candidates are retained in world-frame memory, while a
+continuous 3-D corridor test selects the subset relevant to the current target
+approach. This keeps unrelated objects out of language and graph planning
+without weakening EGO's full depth-map collision avoidance.
+
+The real-flight VINS profile uses the calibrated body-camera matrices rather
+than continuously optimizing them. The bridge independently rejects non-rigid
+or physically implausible sensor extrinsics before any model call can create a
+flight plan.
+
+The bridge starts with `execution_enabled=false`. A true message on
+`/smpf/execution_enable` cannot override that launch-time gate. Even when the
+launch gate is explicitly enabled, runtime execution also requires connected
+and armed PX4 state, fresh VINS odometry, minimum start altitude, and a bounded
+enable-time speed. Disarming closes execution immediately. Dry-run tasks publish
+verified plans on `/smpf/dry_run_plan` and status on `/smpf/status`.
+The shared control interface independently requires fresh PX4 and VINS
+attitudes with roll/pitch disagreement no greater than `5 deg`. A violation
+clears cached motion and requires a new command after recovery, so neither SMPF
+nor SPF can continue an old route after estimator drift.
+
+```bash
+rostopic pub -1 /smpf/task_command std_msgs/String \
+  'data: "{\"instruction\":\"Fly to the chair\",\"mode\":\"navigate\"}"'
+rostopic echo -n 1 /smpf/dry_run_plan
+rostopic echo -n 1 /smpf/status
+```
+
+Do not source or build the complete historical `muavold` workspace. Real
+flight remains disabled until the pending VINS attitude-stability, EGO
+isolation, and controlled-flight gates in `ARCHITECTURE_AND_EXPERIMENTS.md`
+pass.

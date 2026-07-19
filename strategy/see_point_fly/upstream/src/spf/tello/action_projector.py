@@ -390,8 +390,7 @@ class TelloActionProjector(ActionProjector):
                     yaw_only=yaw_only  # Set the yaw-only flag based on depth
                 )
 
-                label = point_info.get('label') or instruction
-                print(f"\nIdentified single action: {label}")
+                print(f"\nIdentified single action: {point_info['label']}")
                 print(f"2D Normalized: ({x}, {y})")
                 print(f"2D Pixels: ({pixel_x}, {pixel_y})")
                 print(f"Depth estimation: {vlm_depth}/10 (adjusted to {adjusted_depth:.2f})")

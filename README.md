@@ -23,9 +23,9 @@ repository must not host or restart a UAV-local GCS backend.
 
 ## Runtime Boundary
 
-- UAV agent: `20.0.0.187:8765`
-- UAV command gateway: `20.0.0.187:9100`
-- UAV camera stream: `http://20.0.0.187:9200`
+- UAV (`uav0`) agent: `20.0.0.188:8765`
+- UAV (`uav0`) command gateway: `20.0.0.188:9100`
+- UAV (`uav0`) camera stream: `http://20.0.0.188:9200`
 - Ground-station GCS: `http://20.0.0.172:8000/`
 
 Control execution remains on the UAV. Ground-station and Windows clients do not

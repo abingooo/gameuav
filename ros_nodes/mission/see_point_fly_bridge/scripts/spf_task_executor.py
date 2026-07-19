@@ -9,7 +9,7 @@ import uuid
 import rospy
 from mavros_msgs.msg import State
 from nav_msgs.msg import Odometry
-from std_msgs.msg import Bool, String
+from std_msgs.msg import Bool, Empty, String
 
 
 ACTIVE_STATES = {"WAITING_GOAL", "WAITING_ARRIVAL", "WAITING_NEXT"}
@@ -41,6 +41,8 @@ class TaskLoop:
         min_start_z=0.4,
         max_start_z=1.5,
         start_max_speed=0.5,
+        require_armed_for_start=True,
+        vehicle_state_timeout_sec=2.5,
         allow_tabletop_start_disarmed=False,
         tabletop_min_start_z=-0.2,
         max_cycles=20,
@@ -57,6 +59,8 @@ class TaskLoop:
         self.min_start_z = float(min_start_z)
         self.max_start_z = float(max_start_z)
         self.start_max_speed = float(start_max_speed)
+        self.require_armed_for_start = bool(require_armed_for_start)
+        self.vehicle_state_timeout_sec = float(vehicle_state_timeout_sec)
         self.allow_tabletop_start_disarmed = bool(allow_tabletop_start_disarmed)
         self.tabletop_min_start_z = float(tabletop_min_start_z)
         self.max_cycles = int(max_cycles)
@@ -254,6 +258,7 @@ class TaskLoop:
             "speed": self.speed,
             "last_rejection": self.last_rejection,
             "last_rejection_at": self.last_rejection_at,
+            "require_armed_for_start": self.require_armed_for_start,
             "tabletop_start_allowed": self.allow_tabletop_start_disarmed,
         }
 
@@ -305,6 +310,13 @@ class TaskLoop:
     def _validate_start_odom(self, now, odom, vehicle_state=None):
         if not self._odom_fresh(now, odom):
             raise TaskLoopError("fresh odometry is required")
+        if self.require_armed_for_start:
+            if not self._vehicle_state_fresh(now, vehicle_state):
+                raise TaskLoopError("fresh MAVROS state is required")
+            if not vehicle_state["connected"]:
+                raise TaskLoopError("MAVROS must be connected before starting SPF")
+            if not vehicle_state["armed"]:
+                raise TaskLoopError("PX4 must already be armed before starting SPF")
         z = float(odom["z"])
         speed = float(odom["speed"])
         if z < self.min_start_z or z > self.max_start_z:
@@ -325,9 +337,25 @@ class TaskLoop:
             armed = bool(vehicle_state["armed"])
         except (KeyError, TypeError, ValueError):
             return False
-        if now - stamp > self.odom_timeout_sec:
+        if now - stamp > self.vehicle_state_timeout_sec:
             return False
         return not armed
+
+    def _vehicle_state_fresh(self, now, vehicle_state):
+        if not isinstance(vehicle_state, dict):
+            return False
+        try:
+            stamp = float(vehicle_state["stamp"])
+            connected = vehicle_state["connected"]
+            armed = vehicle_state["armed"]
+        except (KeyError, TypeError, ValueError):
+            return False
+        return (
+            math.isfinite(stamp)
+            and 0.0 <= now - stamp <= self.vehicle_state_timeout_sec
+            and isinstance(connected, bool)
+            and isinstance(armed, bool)
+        )
 
     def _odom_fresh(self, now, odom):
         if not isinstance(odom, dict):
@@ -343,12 +371,13 @@ class SpfTaskExecutorNode:
     def __init__(self):
         self.start_topic = rospy.get_param("~start_topic", "/spf/task/start")
         self.control_topic = rospy.get_param("~control_topic", "/spf/task/control")
-        self.enable_topic = rospy.get_param("~enable_topic", "/spf/task/enable")
+        self.enable_topic = rospy.get_param("~enable_topic", "/spf/enable")
         self.status_topic = rospy.get_param("~status_topic", "/spf/task/status")
         self.command_topic = rospy.get_param("~command_topic", "/spf/user_command")
         self.last_goal_topic = rospy.get_param("~last_goal_topic", "/spf/last_goal")
         self.odom_topic = rospy.get_param("~odom_topic", "/vins_fusion/imu_propagate")
         self.mavros_state_topic = rospy.get_param("~mavros_state_topic", "/mavros/state")
+        self.stop_topic = rospy.get_param("~stop_topic", "/control/stop")
 
         self.loop = TaskLoop(
             goal_ack_timeout_sec=rospy.get_param("~goal_ack_timeout_sec", 95.0),
@@ -363,6 +392,8 @@ class SpfTaskExecutorNode:
             min_start_z=rospy.get_param("~min_start_z", 0.4),
             max_start_z=rospy.get_param("~max_start_z", 1.5),
             start_max_speed=rospy.get_param("~start_max_speed", 0.5),
+            require_armed_for_start=rospy.get_param("~require_armed_for_start", True),
+            vehicle_state_timeout_sec=rospy.get_param("~vehicle_state_timeout_sec", 2.5),
             allow_tabletop_start_disarmed=rospy.get_param("~allow_tabletop_start_disarmed", False),
             tabletop_min_start_z=rospy.get_param("~tabletop_min_start_z", -0.2),
             max_cycles=rospy.get_param("~max_cycles", 20),
@@ -375,6 +406,7 @@ class SpfTaskExecutorNode:
         self.last_status_publish_at = 0.0
 
         self.command_pub = rospy.Publisher(self.command_topic, String, queue_size=1)
+        self.stop_pub = rospy.Publisher(self.stop_topic, Empty, queue_size=1)
         self.status_pub = rospy.Publisher(self.status_topic, String, queue_size=1, latch=True)
         rospy.Subscriber(self.start_topic, String, self.start_callback, queue_size=1)
         rospy.Subscriber(self.control_topic, String, self.control_callback, queue_size=5)
@@ -405,13 +437,43 @@ class SpfTaskExecutorNode:
             "armed": bool(msg.armed),
             "mode": msg.mode,
         }
+        stop_required = False
         with self.lock:
             self.vehicle_state = vehicle_state
+            if self.loop.enabled and (not msg.connected or not msg.armed):
+                self.loop.set_enabled(False, time.time())
+                stop_required = True
+        if stop_required:
+            self.stop_pub.publish(Empty())
+            self.publish_status(force=True)
 
     def enable_callback(self, msg):
+        stop_required = False
+        now = time.time()
         with self.lock:
-            self.loop.set_enabled(msg.data, time.time())
-            self.publish_status(force=True)
+            requested = bool(msg.data)
+            if requested and self.loop.require_armed_for_start:
+                state = self.vehicle_state
+                state_ready = (
+                    self.loop._vehicle_state_fresh(now, state)
+                    and state["connected"]
+                    and state["armed"]
+                )
+                if not state_ready:
+                    stop_required = self.loop.enabled
+                    self.loop.set_enabled(False, now)
+                    rejection = "fresh connected and armed MAVROS state is required to enable SPF"
+                    self.loop.record_rejection(rejection, now)
+                    self.publish_status(force=True, rejection=rejection)
+                else:
+                    self.loop.set_enabled(True, now)
+                    self.publish_status(force=True)
+            else:
+                stop_required = self.loop.enabled and not requested
+                self.loop.set_enabled(requested, now)
+                self.publish_status(force=True)
+        if stop_required:
+            self.stop_pub.publish(Empty())
 
     def start_callback(self, msg):
         with self.lock:
@@ -426,8 +488,13 @@ class SpfTaskExecutorNode:
             self.publish_status(force=True)
 
     def control_callback(self, msg):
+        stop_required = False
         with self.lock:
             try:
+                stop_required = (
+                    self.loop.state in ACTIVE_STATES
+                    and str(msg.data or "").strip().lower() in {"abort", "stop"}
+                )
                 events = self.loop.control(msg.data, time.time())
             except TaskLoopError as exc:
                 rospy.logwarn("spf_task_executor: rejected control: %s", exc)
@@ -436,6 +503,8 @@ class SpfTaskExecutorNode:
                 return
             self.handle_events(events)
             self.publish_status(force=True)
+        if stop_required:
+            self.stop_pub.publish(Empty())
 
     def last_goal_callback(self, msg):
         try:
@@ -447,10 +516,30 @@ class SpfTaskExecutorNode:
                 self.publish_status(force=True)
 
     def timer_callback(self, _event):
+        stop_required = False
         with self.lock:
-            events = self.loop.tick(time.time(), self.odom)
-            self.handle_events(events)
-            self.publish_status()
+            now = time.time()
+            state = self.vehicle_state
+            state_ready = (
+                not self.loop.require_armed_for_start
+                or (
+                    self.loop._vehicle_state_fresh(now, state)
+                    and state["connected"]
+                    and state["armed"]
+                )
+            )
+            if self.loop.enabled and not state_ready:
+                self.loop.set_enabled(False, now)
+                rejection = "SPF execution gate closed because MAVROS state became stale or unavailable"
+                self.loop.record_rejection(rejection, now)
+                self.publish_status(force=True, rejection=rejection)
+                stop_required = True
+            else:
+                events = self.loop.tick(now, self.odom)
+                self.handle_events(events)
+                self.publish_status()
+        if stop_required:
+            self.stop_pub.publish(Empty())
 
     def handle_events(self, events):
         for event, value in events:

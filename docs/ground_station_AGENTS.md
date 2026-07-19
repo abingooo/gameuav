@@ -7,7 +7,9 @@ Current machine:
 - Host role: ground station
 - Workspace: `/home/abin/Desktop/gameuav_station`
 - Ground station IP: `20.0.0.172`
-- UAV IP: `20.0.0.187`
+- Target UAV: `uav0`
+- UAV IP: `20.0.0.188`
+- `20.0.0.187` is the separate `uav1` endpoint.
 
 Important architecture rule:
 
@@ -30,19 +32,19 @@ Current service:
 Important endpoints:
 
 - Local GCS web: `http://20.0.0.172:8000/`
-- UAV agent: `20.0.0.187:8765`
-- UAV net-to-ROS gateway: `20.0.0.187:9100`
-- UAV camera stream gateway: `http://20.0.0.187:9200`
+- UAV agent: `20.0.0.188:8765`
+- UAV net-to-ROS gateway: `20.0.0.188:9100`
+- UAV camera stream gateway: `http://20.0.0.188:9200`
 
 Expected `.env` direction:
 
 ```bash
-GAMEUAV_AGENT_HOST=20.0.0.187
+GAMEUAV_AGENT_HOST=20.0.0.188
 GAMEUAV_AGENT_PORT=8765
-GAMEUAV_GATEWAY_TCP_HOST=20.0.0.187
+GAMEUAV_GATEWAY_TCP_HOST=20.0.0.188
 GAMEUAV_GATEWAY_TCP_PORT=9100
-GAMEUAV_CAMERA_BASE_URL=http://20.0.0.187:9200
-GAMEUAV_TARGET_UAV_ID=uav1
+GAMEUAV_CAMERA_BASE_URL=http://20.0.0.188:9200
+GAMEUAV_TARGET_UAV_ID=uav0
 GAMEUAV_AGENT_TOKEN=uavuavuavuav
 ```
 
@@ -63,4 +65,3 @@ Development guidance:
 - Camera shared code is imported from `gateway/camera_stream_gateway/*`.
 - Do not assume ROS exists locally on the ground station.
 - If UAV-side code changes are needed, edit the UAV repository at `/home/uav/Desktop/uav_project/gameuav` and then sync the required shared files back here.
-

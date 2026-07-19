@@ -12,6 +12,7 @@ import base64
 from pathlib import Path
 from typing import Any, Dict, Optional, Union
 import argparse
+import os
 import sys
 
 import cv2
@@ -22,9 +23,9 @@ import requests
 class SAMClient:
     def __init__(
         self,
-        server_ip: str = "10.246.1.94",
-        server_port: int = 5000,
-        timeout: float = 10.0,
+        server_ip: Optional[str] = None,
+        server_port: Optional[int] = None,
+        timeout: Optional[float] = None,
         session: Optional[requests.Session] = None,
     ) -> None:
         """
@@ -34,9 +35,13 @@ class SAMClient:
             timeout: 单次请求超时时间，秒。
             session: 可选的 requests.Session 以复用连接。
         """
-        self.server_ip = server_ip
-        self.server_port = server_port
-        self.timeout = timeout
+        self.server_ip = server_ip or os.environ.get("SMPF_SAM_HOST", "10.246.1.94")
+        self.server_port = int(
+            server_port if server_port is not None else os.environ.get("SMPF_SAM_PORT", "5002")
+        )
+        self.timeout = float(
+            timeout if timeout is not None else os.environ.get("SMPF_SAM_TIMEOUT_SEC", "20")
+        )
         self._session = session or requests.Session()
 
     # 公共接口 -----------------------------------------------------------------

@@ -1,0 +1,130 @@
+{
+  "schema": "gameuav.spf_smpf.comparison_profile.v1",
+  "protocol_id": "spf_smpf_primary_realworld_v1",
+  "primary_scope": {
+    "scope_policy": "real_world_only",
+    "environment": "real_world",
+    "task_manifest": "spf_realworld_tasks.json",
+    "task_count": 11,
+    "repetitions_per_task": 5,
+    "method_variants": {
+      "spf": "spf_adaptive",
+      "smpf": "smpf_full"
+    },
+    "expected_pairs": 55,
+    "expected_trials": 110,
+    "search_included": false,
+    "categories": [
+      "navigation",
+      "obstacle",
+      "long_horizon",
+      "reasoning",
+      "follow"
+    ]
+  },
+  "separate_scope": {
+    "environment": "simulation",
+    "task_manifest": "spf_simulation_tasks.json",
+    "task_count": 23,
+    "repetitions_per_task": 5,
+    "follow_included": false,
+    "local_status": "out_of_scope_real_world_only"
+  },
+  "formal_outcome_protocol": {
+    "outcome_schema": "gameuav.spf_comparison.outcome.v3",
+    "pair_id_format": "real_world:{task_id}:r{repetition_2_digits}",
+    "method_orders": [
+      "spf_then_smpf",
+      "smpf_then_spf"
+    ],
+    "duplicate_identity": [
+      "environment",
+      "method",
+      "task_id",
+      "repetition"
+    ],
+    "required_pair_controls": [
+      "scene_id",
+      "start_pose_id",
+      "trial_timeout_sec",
+      "method_order"
+    ],
+    "resolution_policy": "record_actual_and_hold_constant_per_method",
+    "fixed_profile_must_be_operator_verified": true
+  },
+  "category_to_smpf_mode": {
+    "navigation": "navigate",
+    "obstacle": "obstacle",
+    "long_horizon": "long_horizon",
+    "reasoning": "reasoning",
+    "search": "search",
+    "follow": "follow"
+  },
+  "common_controls": {
+    "exact_manifest_prompt": true,
+    "same_start_pose": true,
+    "same_scene_layout": true,
+    "same_trial_timeout": true,
+    "same_operator_success_rule": true,
+    "randomized_method_order": true,
+    "record_model_and_api_backend": true,
+    "record_image_topic_and_resolution": true,
+    "record_inference_latency": true,
+    "record_api_calls": true,
+    "record_completion_time": true,
+    "record_path_length": true,
+    "record_collision": true,
+    "record_final_target_visibility": true,
+    "record_final_target_distance": true
+  },
+  "methods": {
+    "spf_adaptive": {
+      "method": "spf",
+      "upstream_commit": "5621bcf43e9826d60df014541dd0498e743a92bd",
+      "operational_mode": "adaptive_mode",
+      "visual_model": "gemini-3.5-flash",
+      "visual_api_backend": "openai_compatible",
+      "visual_api_protocol": "chat.completions",
+      "image_topic_current_default": "/rgb1/image_raw",
+      "control_route": "/control/spf_position -> /control/position_cmd -> px4ctrl",
+      "trajectory_planner": null,
+      "ego_occupancy_projection": false
+    },
+    "smpf_full": {
+      "method": "smpf",
+      "muavold_branch": "dev",
+      "muavold_commit": "9c0121ae60722d5e1db7d99380cb2cd734aab48a",
+      "visual_model": "gemini-3.5-flash",
+      "visual_api_backend": "openai_compatible",
+      "visual_api_protocol": "chat.completions",
+      "planning_model": "gpt-5.2",
+      "planning_reasoning_effort": "low",
+      "planning_api_backend": "openai_compatible",
+      "planning_api_protocol": "chat.completions",
+      "image_topic_current_default": "/camera/color/image_raw",
+      "depth_topic": "/camera/aligned_depth_to_color/image_raw",
+      "control_route": "/control/ego_position -> EGO -> /control/ego_position_cmd -> /control/position_cmd -> px4ctrl",
+      "trajectory_planner": "EGO"
+    }
+  },
+  "camera_input_policy": {
+    "decision": "preserve_method_specific_inputs",
+    "spf_rgb_topic": "/rgb1/image_raw",
+    "smpf_rgb_topic": "/camera/color/image_raw",
+    "must_report_as_hard_limitation": true,
+    "interpretation": "not_a_camera_controlled_or_pure_planner_comparison"
+  },
+  "required_preflight_experiment_gates": [
+    "record the fixed SPF RGB1 versus SMPF RealSense input difference as a hard limitation",
+    "verify both methods receive the exact same manifest prompt",
+    "verify PX4 starts disarmed before configuration checks",
+    "verify only the selected method owns the control route during each trial",
+    "verify operator collision and final-view scoring are available",
+    "verify Search remains out of the active real-world experiment scope"
+  ],
+  "paper_reference": {
+    "visual_model": "Gemini 2.0 Flash unless otherwise specified",
+    "real_world_platform": "DJI Tello EDU",
+    "simulation_platform": "DRL Simulator"
+  }
+}

@@ -7,6 +7,11 @@ the ROS bridge and returns a relative action suggestion:
 
 {
   "ok": true,
+  "worker": {
+    "api_provider": "openai",
+    "model": "...",
+    "operational_mode": "adaptive_mode"
+  },
   "action": {
     "dx": 0.0,
     "dy": 1.0,
@@ -45,6 +50,7 @@ class WorkerError(RuntimeError):
 _PROJECTOR = None
 _LAST_VLM_RESPONSE_TEXT = ""
 _LOG_FILENAMES = {"input.jpg", "annotated.jpg", "request.json", "response.json", "meta.json"}
+_OPERATIONAL_MODES = {"adaptive_mode", "obstacle_mode"}
 
 
 def _repo_root() -> Path:
@@ -66,6 +72,57 @@ def _ensure_upstream_path() -> Path:
     return upstream
 
 
+def _config_path() -> str:
+    path = os.environ.get(
+        "SPF_CONFIG_PATH",
+        str(_repo_root() / "strategy" / "see_point_fly" / "adapter" / "config_tello.yaml"),
+    )
+    if not Path(path).exists():
+        path = str(_upstream_root() / "config_tello.yaml")
+    return path
+
+
+def _effective_operational_mode(config_path: str) -> str:
+    override = os.environ.get("SPF_OPERATIONAL_MODE", "").strip()
+    if override:
+        mode = override
+    else:
+        try:
+            import yaml
+
+            config = yaml.safe_load(Path(config_path).read_text(encoding="utf-8")) or {}
+        except Exception as exc:
+            raise WorkerError("failed to read SPF configuration: %s" % exc)
+        mode = str(config.get("operational_mode", "adaptive_mode")).strip()
+    if mode not in _OPERATIONAL_MODES:
+        raise WorkerError("unsupported SPF operational mode: %s" % mode)
+    return mode
+
+
+def _configured_model_metadata(config_path: str) -> Dict[str, Any]:
+    try:
+        import yaml
+
+        config = yaml.safe_load(Path(config_path).read_text(encoding="utf-8")) or {}
+    except Exception as exc:
+        raise WorkerError("failed to read SPF configuration: %s" % exc)
+    provider = str(config.get("api_provider", "gemini")).strip().lower()
+    configured_model = str(config.get("model_name", "")).strip()
+    loaded_model = str(getattr(_PROJECTOR, "model_name", "") or "").strip()
+    return {
+        "api_provider": provider,
+        "configured_model": configured_model,
+        "model": loaded_model or configured_model or None,
+        "model_source": (
+            "loaded_projector"
+            if loaded_model
+            else "configured_override"
+            if configured_model
+            else "author_default_pending_projector_load"
+        ),
+    }
+
+
 def _load_projector(image_width: int, image_height: int):
     global _PROJECTOR
     if _PROJECTOR is not None:
@@ -77,12 +134,7 @@ def _load_projector(image_width: int, image_height: int):
         _PROJECTOR = None
 
     upstream = _ensure_upstream_path()
-    config_path = os.environ.get(
-        "SPF_CONFIG_PATH",
-        str(_repo_root() / "strategy" / "see_point_fly" / "adapter" / "config_tello.yaml"),
-    )
-    if not Path(config_path).exists():
-        config_path = str(upstream / "config_tello.yaml")
+    config_path = _config_path()
 
     try:
         from spf.tello.action_projector import TelloActionProjector
@@ -92,7 +144,7 @@ def _load_projector(image_width: int, image_height: int):
             "Run the worker with the SPF uv environment." % exc
         )
 
-    mode = os.environ.get("SPF_OPERATIONAL_MODE", "adaptive_mode")
+    mode = _effective_operational_mode(config_path)
     try:
         _PROJECTOR = TelloActionProjector(
             image_width=image_width,
@@ -142,13 +194,17 @@ def _masked_env(name: str) -> str:
 
 
 def _health_payload() -> Dict[str, Any]:
+    config_path = _config_path()
+    model_metadata = _configured_model_metadata(config_path)
     return {
         "ok": True,
         "service": "spf_worker",
         "wire_api": os.environ.get("SPF_OPENAI_WIRE_API", "chat.completions"),
         "openai_base_url": os.environ.get("OPENAI_BASE_URL", ""),
         "openai_api_key": _masked_env("OPENAI_API_KEY"),
-        "spf_config_path": os.environ.get("SPF_CONFIG_PATH", ""),
+        "spf_config_path": config_path,
+        "operational_mode": _effective_operational_mode(config_path),
+        **model_metadata,
         "logging_enabled": _spf_logging_enabled(),
         "log_dir": str(_spf_log_root()),
     }
@@ -452,6 +508,11 @@ def infer_action(payload: Dict[str, Any]) -> Dict[str, Any]:
         "label": label,
         "screen_x": float(getattr(action, "screen_x", 0.0)),
         "screen_y": float(getattr(action, "screen_y", 0.0)),
+        "api_provider": str(getattr(projector, "api_provider", "") or ""),
+        "model": str(getattr(projector, "model_name", "") or ""),
+        "operational_mode": str(
+            getattr(projector, "operational_mode", "") or ""
+        ),
     }
     if log_dir:
         _write_spf_log(log_dir, image, command, payload, image_jpeg_b64, result, started_at)
@@ -498,7 +559,18 @@ class Handler(BaseHTTPRequestHandler):
         try:
             payload = json.loads(self.rfile.read(length).decode("utf-8"))
             action = infer_action(payload)
-            self._send_json(200, {"ok": True, "action": action})
+            self._send_json(
+                200,
+                {
+                    "ok": True,
+                    "worker": {
+                        "api_provider": action["api_provider"],
+                        "model": action["model"],
+                        "operational_mode": action["operational_mode"],
+                    },
+                    "action": action,
+                },
+            )
         except WorkerError as exc:
             self._send_json(503, {"ok": False, "error": str(exc)})
         except Exception as exc:

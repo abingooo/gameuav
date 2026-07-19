@@ -357,8 +357,8 @@ commands:
   spf_task_enable:
     enabled: true
     type: publish
-    description: Explicitly enable or disable the SPF continuous task executor.
-    topic: /spf/task/enable
+    description: Explicitly enable or disable the SPF bridge and continuous task executor.
+    topic: /spf/enable
     msg_type: std_msgs/Bool
     timeout: 5.0
     args:
@@ -402,6 +402,54 @@ commands:
     message:
       data: "{data}"
 
+  smpf_execution_enable:
+    enabled: true
+    type: publish
+    description: Open or close the SMPF runtime execution gate after launch-time permission.
+    topic: /smpf/execution_enable
+    msg_type: std_msgs/Bool
+    timeout: 5.0
+    args:
+      data:
+        type: bool
+        required: true
+    message:
+      data: "{data}"
+
+  smpf_task_command:
+    enabled: true
+    type: publish
+    description: Submit an SMPF task instruction and mode as a JSON string.
+    topic: /smpf/task_command
+    msg_type: std_msgs/String
+    timeout: 5.0
+    args:
+      data:
+        type: string
+        required: true
+        allow_natural_text: true
+        max_length: 1000
+    message:
+      data: "{data}"
+
+  smpf_task_control:
+    enabled: true
+    type: publish
+    description: Abort, replan, or clear memory for the active SMPF task.
+    topic: /smpf/task_control
+    msg_type: std_msgs/String
+    timeout: 5.0
+    args:
+      data:
+        type: string
+        required: true
+        allowed_values:
+          - "abort"
+          - "replan"
+          - "clear_memory"
+    message:
+      data: "{data}"
+
   takeoff:
     enabled: false
     type: publish
@@ -435,7 +483,7 @@ commands:
     action: takeoff
     dry_run: true
     allow_execute: true
-    check_cache_ttl: 10.0
+    check_cache_ttl: 2.0
     timeout: 5.0
     args:
       dry_run:
@@ -465,6 +513,11 @@ commands:
         topic: /mavros/extended_state
         allowed_landed_states:
           - 1
+      attitude_consistency:
+        name: vins_px4_attitude
+        estimate_topic: /vins_fusion/imu_propagate
+        reference_topic: /mavros/local_position/pose
+        max_roll_pitch_error_deg: 5.0
       sample_topics:
         - name: px4_local_pose
           topic: /mavros/local_position/pose

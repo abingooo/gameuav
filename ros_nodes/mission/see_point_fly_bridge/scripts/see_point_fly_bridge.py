@@ -3,6 +3,7 @@
 import base64
 import json
 import math
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -12,10 +13,11 @@ import rospy
 import tf.transformations
 from cv_bridge import CvBridge
 from geometry_msgs.msg import PoseStamped
+from mavros_msgs.msg import State
 from nav_msgs.msg import Odometry
 from sensor_msgs import point_cloud2
 from sensor_msgs.msg import Image, PointCloud2
-from std_msgs.msg import Bool, String
+from std_msgs.msg import Bool, Empty, String
 
 
 class SeePointFlyBridge:
@@ -31,8 +33,16 @@ class SeePointFlyBridge:
         self.goal_topic = rospy.get_param("~goal_topic", "/control/spf_position")
         self.status_topic = rospy.get_param("~status_topic", "/spf/status")
         self.last_goal_topic = rospy.get_param("~last_goal_topic", "/spf/last_goal")
+        self.stop_topic = rospy.get_param("~stop_topic", "/control/stop")
+        self.mavros_state_topic = rospy.get_param("~mavros_state_topic", "/mavros/state")
 
         self.manual_enable_required = bool(rospy.get_param("~manual_enable_required", True))
+        self.require_armed_for_execution = bool(
+            rospy.get_param("~require_armed_for_execution", True)
+        )
+        self.mavros_state_timeout_sec = float(
+            rospy.get_param("~mavros_state_timeout_sec", 2.5)
+        )
         self.max_step_xy = float(rospy.get_param("~max_step_xy", 1.5))
         self.max_step_z = float(rospy.get_param("~max_step_z", 0.3))
         self.min_goal_distance_xy = float(rospy.get_param("~min_goal_distance_xy", 0.8))
@@ -44,7 +54,7 @@ class SeePointFlyBridge:
         self.odom_timeout_sec = float(rospy.get_param("~odom_timeout_sec", 1.0))
         self.max_abs_odom_position = float(rospy.get_param("~max_abs_odom_position", 100.0))
         self.frame_id = rospy.get_param("~frame_id", "world")
-        self.goal_projection_enabled = bool(rospy.get_param("~goal_projection_enabled", True))
+        self.goal_projection_enabled = bool(rospy.get_param("~goal_projection_enabled", False))
         self.occupancy_topic = rospy.get_param(
             "~occupancy_topic",
             "/drone_0_ego_planner_node/grid_map/occupancy_inflate",
@@ -57,11 +67,14 @@ class SeePointFlyBridge:
         self.goal_projection_max_points = int(rospy.get_param("~goal_projection_max_points", 20000))
 
         self.bridge = CvBridge()
+        self.execution_lock = threading.RLock()
         self.enabled = not self.manual_enable_required
         self.last_image_msg = None
         self.last_image_time = None
         self.last_odom_msg = None
         self.last_odom_time = None
+        self.last_mavros_state = None
+        self.last_mavros_state_time = None
         self.last_goal_time = 0.0
         self.last_occupancy_points = []
         self.last_occupancy_time = None
@@ -70,14 +83,22 @@ class SeePointFlyBridge:
         self.goal_pub = rospy.Publisher(self.goal_topic, PoseStamped, queue_size=10)
         self.status_pub = rospy.Publisher(self.status_topic, String, queue_size=10, latch=True)
         self.last_goal_pub = rospy.Publisher(self.last_goal_topic, String, queue_size=1, latch=True)
+        self.stop_pub = rospy.Publisher(self.stop_topic, Empty, queue_size=1)
 
         rospy.Subscriber(self.image_topic, Image, self.image_callback, queue_size=1)
         rospy.Subscriber(self.odom_topic, Odometry, self.odom_callback, queue_size=10)
+        rospy.Subscriber(
+            self.mavros_state_topic,
+            State,
+            self.mavros_state_callback,
+            queue_size=10,
+        )
         rospy.Subscriber(self.command_topic, String, self.command_callback, queue_size=10)
         rospy.Subscriber(self.action_topic, String, self.action_command_callback, queue_size=10)
         rospy.Subscriber(self.enable_topic, Bool, self.enable_callback, queue_size=10)
         if self.goal_projection_enabled:
             rospy.Subscriber(self.occupancy_topic, PointCloud2, self.occupancy_callback, queue_size=1)
+        self.watchdog_timer = rospy.Timer(rospy.Duration(0.1), self.watchdog_callback)
 
         self.publish_status("ready")
 
@@ -88,6 +109,36 @@ class SeePointFlyBridge:
     def odom_callback(self, msg):
         self.last_odom_msg = msg
         self.last_odom_time = time.time()
+
+    def mavros_state_callback(self, msg):
+        with self.execution_lock:
+            previous = self.last_mavros_state
+            self.last_mavros_state = msg
+            self.last_mavros_state_time = time.time()
+            lost_flight_state = not msg.connected or not msg.armed
+            should_stop = lost_flight_state and (
+                self.enabled
+                or (previous is not None and previous.connected and previous.armed)
+            )
+            if lost_flight_state:
+                self.enabled = False
+            if should_stop:
+                self.stop_pub.publish(Empty())
+                self.publish_status(
+                    "execution gate closed: MAVROS disconnected or PX4 disarmed"
+                )
+
+    def watchdog_callback(self, _event):
+        now = time.time()
+        with self.execution_lock:
+            if not self.enabled:
+                return
+            vehicle_error = self._vehicle_state_error_locked(now)
+            if not vehicle_error:
+                return
+            self.enabled = False
+            self.stop_pub.publish(Empty())
+            self.publish_status("execution gate closed: %s" % vehicle_error)
 
     def occupancy_callback(self, msg):
         points = []
@@ -105,8 +156,21 @@ class SeePointFlyBridge:
         self.last_occupancy_time = time.time()
 
     def enable_callback(self, msg):
-        self.enabled = bool(msg.data)
-        self.publish_status("enabled=%s" % self.enabled)
+        with self.execution_lock:
+            requested = bool(msg.data)
+            was_enabled = self.enabled
+            if requested:
+                vehicle_error = self._vehicle_state_error_locked(time.time())
+                if vehicle_error:
+                    self.enabled = False
+                    if was_enabled:
+                        self.stop_pub.publish(Empty())
+                    self.publish_status("enable rejected: %s" % vehicle_error)
+                    return
+            self.enabled = requested
+            if was_enabled and not self.enabled:
+                self.stop_pub.publish(Empty())
+            self.publish_status("enabled=%s" % self.enabled)
 
     def command_callback(self, msg):
         command = (msg.data or "").strip()
@@ -156,6 +220,10 @@ class SeePointFlyBridge:
         return command, action
 
     def execution_ready(self, command, now):
+        with self.execution_lock:
+            return self._execution_ready_locked(command, now)
+
+    def _execution_ready_locked(self, command, now):
         if not command:
             self.publish_status("rejected: empty command")
             return False
@@ -165,7 +233,32 @@ class SeePointFlyBridge:
         if now - self.last_goal_time < self.rate_limit_sec:
             self.publish_status("rejected: rate limited")
             return False
+        vehicle_error = self._vehicle_state_error_locked(now)
+        if vehicle_error:
+            if self.enabled:
+                self.enabled = False
+                self.stop_pub.publish(Empty())
+            self.publish_status("rejected: %s" % vehicle_error)
+            return False
         return self.inputs_ready(now)
+
+    def vehicle_state_error(self, now):
+        with self.execution_lock:
+            return self._vehicle_state_error_locked(now)
+
+    def _vehicle_state_error_locked(self, now):
+        if not self.require_armed_for_execution:
+            return None
+        if self.last_mavros_state is None or self.last_mavros_state_time is None:
+            return "no MAVROS state"
+        state_age = now - self.last_mavros_state_time
+        if state_age < 0.0 or state_age > self.mavros_state_timeout_sec:
+            return "stale MAVROS state"
+        if not self.last_mavros_state.connected:
+            return "MAVROS is disconnected"
+        if not self.last_mavros_state.armed:
+            return "PX4 is not armed"
+        return None
 
     def publish_action(self, command, action):
         if not self.execution_ready(command, time.time()):
@@ -182,16 +275,26 @@ class SeePointFlyBridge:
 
         raw_goal = self.copy_goal(goal)
         goal = self.project_goal_if_needed(goal)
-        self.goal_pub.publish(goal)
-        self.last_goal_time = time.time()
-        self.publish_last_goal(command, action, goal, yaw_deg, raw_goal=raw_goal, projection=self.last_projection)
-        if self.last_projection and self.last_projection.get("adjusted"):
-            self.publish_status(
-                "published projected goal: %s (backoff %.2fm)"
-                % (command, self.last_projection.get("backoff_m", 0.0))
+        with self.execution_lock:
+            if not self._execution_ready_locked(command, time.time()):
+                return False
+            self.goal_pub.publish(goal)
+            self.last_goal_time = time.time()
+            self.publish_last_goal(
+                command,
+                action,
+                goal,
+                yaw_deg,
+                raw_goal=raw_goal,
+                projection=self.last_projection,
             )
-        else:
-            self.publish_status("published goal: %s" % command)
+            if self.last_projection and self.last_projection.get("adjusted"):
+                self.publish_status(
+                    "published projected goal: %s (backoff %.2fm)"
+                    % (command, self.last_projection.get("backoff_m", 0.0))
+                )
+            else:
+                self.publish_status("published goal: %s" % command)
         return True
 
     def inputs_ready(self, now):
@@ -288,7 +391,8 @@ class SeePointFlyBridge:
             goal.header.stamp = rospy.Time.now()
             goal.header.frame_id = self.frame_id
             goal.pose.position = pose.position
-            target_yaw = self.current_yaw_rad() + math.radians(yaw_deg)
+            # SPF/Tello defines positive image-space yaw as a right turn; ENU yaw is left-positive.
+            target_yaw = self.current_yaw_rad() - math.radians(yaw_deg)
             quaternion = tf.transformations.quaternion_from_euler(0.0, 0.0, target_yaw)
             goal.pose.orientation.x = quaternion[0]
             goal.pose.orientation.y = quaternion[1]
@@ -320,6 +424,8 @@ class SeePointFlyBridge:
         world_dx = math.cos(yaw) * body_x_forward - math.sin(yaw) * body_y_left
         world_dy = math.sin(yaw) * body_x_forward + math.cos(yaw) * body_y_left
         world_z = max(self.min_z, min(self.max_z, pose.position.z + body_z_up))
+        relative_yaw_right = math.atan2(dx_right, dy_forward) if xy_norm > 1e-6 else 0.0
+        target_yaw = yaw - relative_yaw_right
 
         goal = PoseStamped()
         goal.header.stamp = rospy.Time.now()
@@ -327,8 +433,12 @@ class SeePointFlyBridge:
         goal.pose.position.x = pose.position.x + world_dx
         goal.pose.position.y = pose.position.y + world_dy
         goal.pose.position.z = world_z
-        goal.pose.orientation = pose.orientation
-        return goal, action.get("yaw_deg")
+        quaternion = tf.transformations.quaternion_from_euler(0.0, 0.0, target_yaw)
+        goal.pose.orientation.x = quaternion[0]
+        goal.pose.orientation.y = quaternion[1]
+        goal.pose.orientation.z = quaternion[2]
+        goal.pose.orientation.w = quaternion[3]
+        return goal, math.degrees(relative_yaw_right)
 
     def copy_goal(self, goal):
         copied = PoseStamped()

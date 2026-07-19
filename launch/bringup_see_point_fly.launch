@@ -3,11 +3,15 @@
   <arg name="odom_topic" default="/vins_fusion/imu_propagate"/>
   <arg name="worker_url" default="http://127.0.0.1:9310/infer"/>
   <arg name="goal_topic" default="/control/spf_position"/>
+  <arg name="goal_projection_enabled" default="false"/>
+  <arg name="enable_topic" default="/spf/enable"/>
 
   <include file="$(find see_point_fly_bridge)/launch/see_point_fly_bridge.launch">
     <arg name="image_topic" value="$(arg image_topic)"/>
     <arg name="odom_topic" value="$(arg odom_topic)"/>
     <arg name="worker_url" value="$(arg worker_url)"/>
     <arg name="goal_topic" value="$(arg goal_topic)"/>
+    <arg name="goal_projection_enabled" value="$(arg goal_projection_enabled)"/>
+    <arg name="enable_topic" value="$(arg enable_topic)"/>
   </include>
 </launch>

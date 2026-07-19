@@ -389,7 +389,7 @@ class RosCommandExecutor:
             "/spf/status",
             "/spf/user_command",
             "/spf/action_command",
-            "/spf/task/enable",
+            "/spf/enable",
             "/spf/task/start",
             "/spf/task/control",
             "/spf/task/status",

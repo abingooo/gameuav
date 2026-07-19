@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 from dataclasses import dataclass
+import math
 
 import yaml
 
@@ -149,12 +150,84 @@ class RosSafetyChecker:
                 self._check_battery(battery_check, checks_config, missing_topics, no_publisher_topics)
             )
 
+        attitude_check = checks_config.get("attitude_consistency")
+        if attitude_check:
+            results.append(
+                self._check_attitude_consistency(
+                    attitude_check,
+                    checks_config,
+                    missing_topics,
+                    no_publisher_topics,
+                )
+            )
+
         for sample in checks_config.get("sample_topics") or []:
             results.append(
                 self._check_topic_sample(sample, checks_config, missing_topics, no_publisher_topics)
             )
 
         return results
+
+    def _check_attitude_consistency(
+        self,
+        attitude_check,
+        checks_config,
+        missing_topics,
+        no_publisher_topics,
+    ):
+        name = attitude_check.get("name", "attitude_consistency")
+        estimate_topic = attitude_check["estimate_topic"]
+        reference_topic = attitude_check["reference_topic"]
+        max_error_deg = float(attitude_check.get("max_roll_pitch_error_deg", 5.0))
+
+        for topic in (estimate_topic, reference_topic):
+            if topic in missing_topics:
+                return SafetyCheckResult(name=name, ok=False, detail="topic is missing: %s" % topic)
+            if topic in no_publisher_topics:
+                return SafetyCheckResult(
+                    name=name,
+                    ok=False,
+                    detail="topic has no publisher: %s" % topic,
+                )
+
+        estimate, error = self._sample_topic(estimate_topic, checks_config)
+        if error:
+            return SafetyCheckResult(name=name, ok=False, detail=error)
+        reference, error = self._sample_topic(reference_topic, checks_config)
+        if error:
+            return SafetyCheckResult(name=name, ok=False, detail=error)
+
+        try:
+            estimate_roll, estimate_pitch = _roll_pitch_from_message(estimate)
+            reference_roll, reference_pitch = _roll_pitch_from_message(reference)
+        except (KeyError, TypeError, ValueError) as exc:
+            return SafetyCheckResult(
+                name=name,
+                ok=False,
+                detail="invalid attitude message: %s" % exc,
+            )
+
+        roll_error_deg = math.degrees(_angle_error(estimate_roll, reference_roll))
+        pitch_error_deg = math.degrees(_angle_error(estimate_pitch, reference_pitch))
+        ok = roll_error_deg <= max_error_deg and pitch_error_deg <= max_error_deg
+        value = {
+            "estimate_roll_deg": math.degrees(estimate_roll),
+            "estimate_pitch_deg": math.degrees(estimate_pitch),
+            "reference_roll_deg": math.degrees(reference_roll),
+            "reference_pitch_deg": math.degrees(reference_pitch),
+            "roll_error_deg": roll_error_deg,
+            "pitch_error_deg": pitch_error_deg,
+            "max_roll_pitch_error_deg": max_error_deg,
+        }
+        return SafetyCheckResult(
+            name=name,
+            ok=ok,
+            detail=(
+                "roll_error=%.2fdeg, pitch_error=%.2fdeg, max=%.2fdeg"
+                % (roll_error_deg, pitch_error_deg, max_error_deg)
+            ),
+            value=value,
+        )
 
     def _safe_list_nodes(self, checks_config, results):
         try:
@@ -427,3 +500,38 @@ class RosSafetyChecker:
         if not isinstance(message, dict):
             return None, "message from %s is not a mapping" % topic
         return message, None
+
+
+def _roll_pitch_from_message(message):
+    orientation = message
+    for key in ("pose", "pose"):
+        if not isinstance(orientation, dict) or key not in orientation:
+            break
+        orientation = orientation[key]
+    if not isinstance(orientation, dict) or "orientation" not in orientation:
+        orientation = message.get("pose", message)
+    if isinstance(orientation, dict) and "orientation" in orientation:
+        orientation = orientation["orientation"]
+    if not isinstance(orientation, dict):
+        raise ValueError("orientation is missing")
+
+    try:
+        x, y, z, w = (float(orientation[key]) for key in ("x", "y", "z", "w"))
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError("orientation quaternion is incomplete") from exc
+    if not all(math.isfinite(value) for value in (x, y, z, w)):
+        raise ValueError("orientation quaternion is not finite")
+    norm = math.sqrt(x * x + y * y + z * z + w * w)
+    if norm < 1e-9:
+        raise ValueError("orientation quaternion has zero norm")
+    x, y, z, w = (value / norm for value in (x, y, z, w))
+
+    roll = math.atan2(2.0 * (w * x + y * z), 1.0 - 2.0 * (x * x + y * y))
+    pitch_sin = max(-1.0, min(1.0, 2.0 * (w * y - z * x)))
+    pitch = math.asin(pitch_sin)
+    return roll, pitch
+
+
+def _angle_error(first, second):
+    delta = first - second
+    return abs(math.atan2(math.sin(delta), math.cos(delta)))

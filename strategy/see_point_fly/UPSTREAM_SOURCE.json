@@ -1,0 +1,15 @@
+{
+  "repository": "https://github.com/Hu-chih-yao/see-point-fly.git",
+  "branch": "main",
+  "commit": "5621bcf43e9826d60df014541dd0498e743a92bd",
+  "commit_subject": "Update README.md",
+  "imported_at": "2026-07-18",
+  "included": [
+    "all 59 files tracked by the upstream commit"
+  ],
+  "excluded": [
+    "upstream .git metadata",
+    "generated virtual environments, __pycache__, and .pyc files"
+  ],
+  "local_modifications": []
+}

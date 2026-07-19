@@ -1,6 +1,7 @@
 import tempfile
 import time
 import unittest
+import math
 from pathlib import Path
 
 import yaml
@@ -10,6 +11,7 @@ from agent.ros_command_executor.executor import (
     RosCommandRuntimeError,
     _spf_direct_samples_ok,
 )
+from agent.ros_command_executor.safety_checks import RosSafetyChecker
 
 
 def write_config(path):
@@ -133,6 +135,109 @@ class RosCommandExecutorTest(unittest.TestCase):
                 }
             )
         )
+
+    def test_realworld_smpf_commands_are_whitelisted(self):
+        root = Path(__file__).resolve().parents[1]
+        config = yaml.safe_load(
+            (root / "config/ros_commands/ros_command_executor.yaml").read_text(
+                encoding="utf-8"
+            )
+        )
+        commands = config["commands"]
+        self.assertEqual(
+            commands["smpf_execution_enable"]["topic"],
+            "/smpf/execution_enable",
+        )
+        self.assertEqual(
+            commands["smpf_task_command"]["topic"],
+            "/smpf/task_command",
+        )
+        self.assertEqual(
+            commands["smpf_task_control"]["topic"],
+            "/smpf/task_control",
+        )
+        self.assertEqual(
+            set(commands["smpf_task_control"]["args"]["data"]["allowed_values"]),
+            {"abort", "replan", "clear_memory"},
+        )
+
+    def test_spf_bridge_and_task_executor_share_explicit_gate(self):
+        root = Path(__file__).resolve().parents[1]
+        config = yaml.safe_load(
+            (root / "config/ros_commands/ros_command_executor.yaml").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(config["commands"]["spf_task_enable"]["topic"], "/spf/enable")
+
+    def test_production_takeoff_checks_vins_px4_attitude(self):
+        root = Path(__file__).resolve().parents[1]
+        config = yaml.safe_load(
+            (root / "config/ros_commands/ros_command_executor.yaml").read_text(
+                encoding="utf-8"
+            )
+        )
+        command = config["commands"]["safe_takeoff"]
+        attitude = command["checks"]["attitude_consistency"]
+        self.assertEqual(attitude["estimate_topic"], "/vins_fusion/imu_propagate")
+        self.assertEqual(attitude["reference_topic"], "/mavros/local_position/pose")
+        self.assertEqual(attitude["max_roll_pitch_error_deg"], 5.0)
+        self.assertLessEqual(command["check_cache_ttl"], 2.0)
+
+    def test_attitude_consistency_accepts_small_roll_pitch_error(self):
+        checker = self._attitude_checker(roll_deg=3.0, pitch_deg=-2.0)
+        result = checker.run_checks(self._attitude_check_config())[-1]
+        self.assertTrue(result.ok)
+        self.assertLess(result.value["roll_error_deg"], 5.0)
+        self.assertLess(result.value["pitch_error_deg"], 5.0)
+
+    def test_attitude_consistency_rejects_large_roll_error(self):
+        checker = self._attitude_checker(roll_deg=12.0, pitch_deg=1.0)
+        result = checker.run_checks(self._attitude_check_config())[-1]
+        self.assertFalse(result.ok)
+        self.assertGreater(result.value["roll_error_deg"], 5.0)
+        self.assertIn("max=5.00deg", result.detail)
+
+    @staticmethod
+    def _attitude_check_config():
+        return {
+            "checks": {
+                "require_ros_master": False,
+                "attitude_consistency": {
+                    "name": "vins_px4_attitude",
+                    "estimate_topic": "/vins",
+                    "reference_topic": "/px4",
+                    "max_roll_pitch_error_deg": 5.0,
+                },
+            }
+        }
+
+    @staticmethod
+    def _attitude_checker(roll_deg, pitch_deg):
+        roll = math.radians(roll_deg)
+        pitch = math.radians(pitch_deg)
+        x = math.sin(roll / 2.0) * math.cos(pitch / 2.0)
+        y = math.cos(roll / 2.0) * math.sin(pitch / 2.0)
+        z = -math.sin(roll / 2.0) * math.sin(pitch / 2.0)
+        w = math.cos(roll / 2.0) * math.cos(pitch / 2.0)
+
+        def fake_run(command, timeout=None):
+            topic = command[-1]
+            if topic == "/vins":
+                return (
+                    "pose:\n"
+                    "  pose:\n"
+                    "    orientation:\n"
+                    "      x: %.12f\n"
+                    "      y: %.12f\n"
+                    "      z: %.12f\n"
+                    "      w: %.12f\n" % (x, y, z, w)
+                )
+            if topic == "/px4":
+                return "pose:\n  orientation:\n    x: 0\n    y: 0\n    z: 0\n    w: 1\n"
+            raise AssertionError("unexpected command: %r" % (command,))
+
+        return RosSafetyChecker(fake_run, lambda: True)
 
     def test_reject_unknown_command(self):
         with tempfile.TemporaryDirectory() as tmp:

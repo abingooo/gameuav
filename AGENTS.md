@@ -6,7 +6,9 @@ Current machine:
 
 - Host role: UAV onboard computer
 - Workspace: `/home/uav/Desktop/uav_project/gameuav`
-- UAV IP used by the ground station: `20.0.0.187`
+- UAV identity: `uav0`
+- UAV IP used by the ground station: `20.0.0.188`
+- `20.0.0.187` is reserved for `uav1`, not this machine.
 - Ground station IP: `20.0.0.172`
 
 Important architecture rule:
@@ -32,7 +34,7 @@ Ground-station responsibilities:
 
 - The ground station code is deployed at `/home/abin/Desktop/gameuav_station` on `20.0.0.172`.
 - It contains `gcs/`, `comm/`, `gateway/`, and config needed by the web backend.
-- The browser should access `http://20.0.0.172:8000/`, not `20.0.0.187:8000`.
+- The browser should access `http://20.0.0.172:8000/`, not `20.0.0.188:8000`.
 
 Current service split:
 
@@ -45,9 +47,9 @@ Current service split:
 
 Key network endpoints:
 
-- UAV agent: `20.0.0.187:8765`
-- UAV net-to-ROS gateway: `20.0.0.187:9100`
-- UAV camera stream gateway: `http://20.0.0.187:9200`
+- UAV agent: `20.0.0.188:8765`
+- UAV net-to-ROS gateway: `20.0.0.188:9100`
+- UAV camera stream gateway: `http://20.0.0.188:9200`
 - Ground station web GCS: `http://20.0.0.172:8000`
 
 Common UAV-side commands:
@@ -73,4 +75,3 @@ Known useful SSH alias:
 ```bash
 ssh gameuav-station
 ```
-

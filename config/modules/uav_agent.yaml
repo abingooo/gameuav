@@ -32,6 +32,12 @@ modules:
       enable_color:
         - "true"
         - "false"
+      enable_sync:
+        - "true"
+        - "false"
+      align_depth:
+        - "true"
+        - "false"
 
   usb_camera:
     type: launch
@@ -102,6 +108,12 @@ modules:
       camera_serial_no: null
       camera_usb_port_id: null
       enable_realsense_color:
+        - "true"
+        - "false"
+      realsense_enable_sync:
+        - "true"
+        - "false"
+      realsense_align_depth:
         - "true"
         - "false"
       start_mavros:
@@ -229,6 +241,12 @@ modules:
       enable_realsense_color:
         - "true"
         - "false"
+      realsense_enable_sync:
+        - "true"
+        - "false"
+      realsense_align_depth:
+        - "true"
+        - "false"
       px4ctrl_no_rc:
         - "true"
         - "false"
@@ -252,12 +270,21 @@ modules:
       drone_id: "0"
       use_tiplight: "false"
       use_see_point_fly: "false"
+      use_smpf: "false"
+      smpf_execution_enabled: "false"
+      smpf_llm_reasoning_effort: "low"
     allowed_args:
       fcu_url: null
       camera: null
       camera_serial_no: null
       camera_usb_port_id: null
       enable_realsense_color:
+        - "true"
+        - "false"
+      realsense_enable_sync:
+        - "true"
+        - "false"
+      realsense_align_depth:
         - "true"
         - "false"
       drone_id: null
@@ -273,6 +300,17 @@ modules:
       use_see_point_fly:
         - "true"
         - "false"
+      use_smpf:
+        - "true"
+        - "false"
+      smpf_execution_enabled:
+        - "true"
+        - "false"
+      smpf_llm_reasoning_effort:
+        - "minimal"
+        - "low"
+        - "medium"
+        - "high"
       spf_image_topic: null
       spf_odom_topic: null
       spf_worker_url: null
@@ -298,12 +336,23 @@ modules:
       drone_id: "0"
       use_tiplight: "false"
       use_see_point_fly: "false"
+      use_smpf: "true"
+      smpf_execution_enabled: "false"
+      smpf_llm_reasoning_effort: "low"
+      realsense_enable_sync: "true"
+      realsense_align_depth: "true"
     allowed_args:
       fcu_url: null
       camera: null
       camera_serial_no: null
       camera_usb_port_id: null
       enable_realsense_color:
+        - "true"
+        - "false"
+      realsense_enable_sync:
+        - "true"
+        - "false"
+      realsense_align_depth:
         - "true"
         - "false"
       drone_id: null
@@ -319,6 +368,17 @@ modules:
       use_see_point_fly:
         - "true"
         - "false"
+      use_smpf:
+        - "true"
+        - "false"
+      smpf_execution_enabled:
+        - "true"
+        - "false"
+      smpf_llm_reasoning_effort:
+        - "minimal"
+        - "low"
+        - "medium"
+        - "high"
       spf_image_topic: null
       spf_odom_topic: null
       spf_worker_url: null
@@ -327,6 +387,24 @@ modules:
         - "false"
       control_ego_position_cmd_topic: null
       control_output_position_cmd_topic: null
+
+  smpf:
+    type: launch
+    description: "SMPF calibrated RGB-D model planner bridge; execution disabled by default"
+    file: launch/bringup_smpf.launch
+    args:
+      execution_enabled: "false"
+      llm_reasoning_effort: "low"
+    allowed_args:
+      execution_enabled:
+        - "true"
+        - "false"
+      llm_reasoning_effort:
+        - "minimal"
+        - "low"
+        - "medium"
+        - "high"
+      goal_topic: null
 
   tiplight:
     type: launch

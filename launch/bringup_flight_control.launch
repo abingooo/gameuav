@@ -4,6 +4,8 @@
   <arg name="camera_serial_no" default=""/>
   <arg name="camera_usb_port_id" default=""/>
   <arg name="enable_realsense_color" default="true"/>
+  <arg name="realsense_enable_sync" default="false"/>
+  <arg name="realsense_align_depth" default="false"/>
   <arg name="px4ctrl_no_rc" default="false"/>
   <arg name="px4ctrl_enable_auto_arm" default="true"/>
   <arg name="configure_mavros_stream_rates" default="true"/>
@@ -17,6 +19,8 @@
     <arg name="camera_serial_no" value="$(arg camera_serial_no)"/>
     <arg name="camera_usb_port_id" value="$(arg camera_usb_port_id)"/>
     <arg name="enable_realsense_color" value="$(arg enable_realsense_color)"/>
+    <arg name="realsense_enable_sync" value="$(arg realsense_enable_sync)"/>
+    <arg name="realsense_align_depth" value="$(arg realsense_align_depth)"/>
     <arg name="configure_mavros_stream_rates" value="$(arg configure_mavros_stream_rates)"/>
   </include>
 

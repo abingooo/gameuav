@@ -1,0 +1,27 @@
+{
+  "schema": "gameuav.spf_comparison.tasks.v1",
+  "source": "See, Point, Fly supplementary material, Table 1 real-world tasks",
+  "source_repository": "https://github.com/yuna0x0/spf-suppl.git",
+  "source_commit": "1308b59c6986aed9938572075d8dc22363047d30",
+  "environment": "real_world",
+  "author_platform": "DJI Tello EDU",
+  "repetitions_per_task": 5,
+  "success_rule": "Complete the requested task without collision; where applicable finish with the target clearly visible and within 1 meter.",
+  "target_distance_rule_m": {"minimum": 0.0, "maximum": 1.0},
+  "search_reported_separately": true,
+  "search_manifest": "spf_simulation_tasks.json",
+  "tasks": [
+    {"id": "nav_chair_long", "category": "navigation", "prompt": "Fly to the chair (long distance)"},
+    {"id": "avoid_person_cone", "category": "obstacle", "prompt": "Fly to the person without hitting the cone"},
+    {"id": "avoid_person_door", "category": "obstacle", "prompt": "Fly to the person without hitting the door"},
+    {"id": "long_chairs_next", "category": "long_horizon", "prompt": "Fly to the chairs and the next"},
+    {"id": "long_cone_next", "category": "long_horizon", "prompt": "Fly to the cone and the next"},
+    {"id": "reason_dry_chair", "category": "reasoning", "prompt": "It's raining, head to the comfiest chair that looks like it'll keep you dry!"},
+    {"id": "reason_person_help", "category": "reasoning", "prompt": "Fly to the person who needs help"},
+    {"id": "reason_thirsty", "category": "reasoning", "prompt": "I'm thirsty, find something that can help me."},
+    {"id": "reason_dark_person", "category": "reasoning", "prompt": "Fly to the person in the dark area"},
+    {"id": "follow_red_cone", "category": "follow", "prompt": "Fly toward the body of the person with red cone"},
+    {"id": "follow_green_shirt", "category": "follow", "prompt": "Fly toward the person with green shirt"}
+  ],
+  "separate_tasks": []
+}

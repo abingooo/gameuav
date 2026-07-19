@@ -1,0 +1,107 @@
+{
+  "schema": "gameuav.smpf.ablation_variants.v1",
+  "primary_comparison": ["spf_adaptive", "smpf_full"],
+  "variants": [
+    {
+      "id": "spf_adaptive",
+      "method": "spf",
+      "role": "released adaptive-policy baseline ported to PX4",
+      "deterministic_fallback_enabled": false,
+      "completed_target_exclusion_enabled": false,
+      "goal_condition_validation_enabled": false,
+      "corridor_obstacle_filter_enabled": false,
+      "follow_step_limit_enabled": false
+    },
+    {
+      "id": "smpf_full",
+      "method": "smpf",
+      "role": "proposed method",
+      "deterministic_fallback_enabled": true,
+      "completed_target_exclusion_enabled": true,
+      "goal_condition_validation_enabled": true,
+      "corridor_obstacle_filter_enabled": true,
+      "follow_step_limit_enabled": false
+    },
+    {
+      "id": "smpf_llm_only",
+      "method": "smpf",
+      "role": "deterministic path-repair ablation",
+      "deterministic_fallback_enabled": false,
+      "completed_target_exclusion_enabled": true,
+      "goal_condition_validation_enabled": true,
+      "corridor_obstacle_filter_enabled": true,
+      "follow_step_limit_enabled": false
+    },
+    {
+      "id": "smpf_no_target_identity",
+      "method": "smpf",
+      "role": "long-horizon target-identity ablation",
+      "deterministic_fallback_enabled": true,
+      "completed_target_exclusion_enabled": false,
+      "goal_condition_validation_enabled": true,
+      "corridor_obstacle_filter_enabled": true,
+      "follow_step_limit_enabled": false
+    },
+    {
+      "id": "smpf_no_goal_contract",
+      "method": "smpf",
+      "role": "goal-conditioned terminal-validation ablation",
+      "deterministic_fallback_enabled": true,
+      "completed_target_exclusion_enabled": true,
+      "goal_condition_validation_enabled": false,
+      "corridor_obstacle_filter_enabled": true,
+      "follow_step_limit_enabled": false
+    },
+    {
+      "id": "smpf_no_corridor_filter",
+      "method": "smpf",
+      "role": "3-D corridor obstacle-filter ablation",
+      "deterministic_fallback_enabled": true,
+      "completed_target_exclusion_enabled": true,
+      "goal_condition_validation_enabled": true,
+      "corridor_obstacle_filter_enabled": false,
+      "follow_step_limit_enabled": false
+    },
+    {
+      "id": "smpf_bounded_follow_goal",
+      "method": "smpf",
+      "role": "bounded 0.50 m Follow-goal ablation",
+      "deterministic_fallback_enabled": true,
+      "completed_target_exclusion_enabled": true,
+      "goal_condition_validation_enabled": true,
+      "corridor_obstacle_filter_enabled": true,
+      "follow_step_limit_enabled": true
+    }
+  ],
+  "required_metrics": [
+    "success",
+    "collision",
+    "duration_sec",
+    "path_length_m",
+    "api_calls",
+    "vlm_attempts",
+    "minimum_clearance_m",
+    "planner_source",
+    "fallback_trigger",
+    "target_approach_candidate_count",
+    "sam_bbox_fallback_count",
+    "observation_age_at_plan_sec",
+    "follow_step_distance_m",
+    "follow_step_clipped",
+    "follow_goal_distance_m",
+    "follow_goal_clipped",
+    "follow_goal_candidate_index",
+    "follow_goal_candidate_count",
+    "requested_target_surface_standoff_m",
+    "target_center_distance_m",
+    "goal_representation",
+    "trajectory_owner",
+    "follow_execution_waypoint_count",
+    "target_identity_rejections",
+    "target_surface_distance_m",
+    "target_visible",
+    "final_yaw_error_rad",
+    "planning_obstacle_count",
+    "filtered_memory_obstacle_count"
+  ]
+}

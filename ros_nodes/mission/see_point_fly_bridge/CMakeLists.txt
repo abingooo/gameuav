@@ -4,6 +4,7 @@ project(see_point_fly_bridge)
 find_package(catkin REQUIRED COMPONENTS
   cv_bridge
   geometry_msgs
+  mavros_msgs
   nav_msgs
   rospy
   sensor_msgs

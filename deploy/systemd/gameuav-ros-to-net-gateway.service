@@ -2,6 +2,7 @@
 Description=GameUAV ROS to network gateway
 After=network-online.target gameuav-agent.service
 Wants=network-online.target
+PartOf=gameuav-agent.service
 
 [Service]
 Type=simple

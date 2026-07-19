@@ -3,6 +3,7 @@ project(gameuav_control_interface)
 
 find_package(catkin REQUIRED COMPONENTS
   geometry_msgs
+  mavros_msgs
   nav_msgs
   quadrotor_msgs
   rospy
