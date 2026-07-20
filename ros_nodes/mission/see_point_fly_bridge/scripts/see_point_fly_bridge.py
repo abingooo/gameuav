@@ -17,7 +17,7 @@ from mavros_msgs.msg import State
 from nav_msgs.msg import Odometry
 from sensor_msgs import point_cloud2
 from sensor_msgs.msg import Image, PointCloud2
-from std_msgs.msg import Bool, Empty, String
+from std_msgs.msg import Bool, String
 
 
 class SeePointFlyBridge:
@@ -33,7 +33,6 @@ class SeePointFlyBridge:
         self.goal_topic = rospy.get_param("~goal_topic", "/control/spf_position")
         self.status_topic = rospy.get_param("~status_topic", "/spf/status")
         self.last_goal_topic = rospy.get_param("~last_goal_topic", "/spf/last_goal")
-        self.stop_topic = rospy.get_param("~stop_topic", "/control/stop")
         self.mavros_state_topic = rospy.get_param("~mavros_state_topic", "/mavros/state")
 
         self.manual_enable_required = bool(rospy.get_param("~manual_enable_required", True))
@@ -83,8 +82,6 @@ class SeePointFlyBridge:
         self.goal_pub = rospy.Publisher(self.goal_topic, PoseStamped, queue_size=10)
         self.status_pub = rospy.Publisher(self.status_topic, String, queue_size=10, latch=True)
         self.last_goal_pub = rospy.Publisher(self.last_goal_topic, String, queue_size=1, latch=True)
-        self.stop_pub = rospy.Publisher(self.stop_topic, Empty, queue_size=1)
-
         rospy.Subscriber(self.image_topic, Image, self.image_callback, queue_size=1)
         rospy.Subscriber(self.odom_topic, Odometry, self.odom_callback, queue_size=10)
         rospy.Subscriber(
@@ -116,14 +113,13 @@ class SeePointFlyBridge:
             self.last_mavros_state = msg
             self.last_mavros_state_time = time.time()
             lost_flight_state = not msg.connected or not msg.armed
-            should_stop = lost_flight_state and (
+            should_report = lost_flight_state and (
                 self.enabled
                 or (previous is not None and previous.connected and previous.armed)
             )
             if lost_flight_state:
                 self.enabled = False
-            if should_stop:
-                self.stop_pub.publish(Empty())
+            if should_report:
                 self.publish_status(
                     "execution gate closed: MAVROS disconnected or PX4 disarmed"
                 )
@@ -137,7 +133,6 @@ class SeePointFlyBridge:
             if not vehicle_error:
                 return
             self.enabled = False
-            self.stop_pub.publish(Empty())
             self.publish_status("execution gate closed: %s" % vehicle_error)
 
     def occupancy_callback(self, msg):
@@ -158,18 +153,13 @@ class SeePointFlyBridge:
     def enable_callback(self, msg):
         with self.execution_lock:
             requested = bool(msg.data)
-            was_enabled = self.enabled
             if requested:
                 vehicle_error = self._vehicle_state_error_locked(time.time())
                 if vehicle_error:
                     self.enabled = False
-                    if was_enabled:
-                        self.stop_pub.publish(Empty())
                     self.publish_status("enable rejected: %s" % vehicle_error)
                     return
             self.enabled = requested
-            if was_enabled and not self.enabled:
-                self.stop_pub.publish(Empty())
             self.publish_status("enabled=%s" % self.enabled)
 
     def command_callback(self, msg):
@@ -237,7 +227,6 @@ class SeePointFlyBridge:
         if vehicle_error:
             if self.enabled:
                 self.enabled = False
-                self.stop_pub.publish(Empty())
             self.publish_status("rejected: %s" % vehicle_error)
             return False
         return self.inputs_ready(now)
@@ -580,6 +569,14 @@ class SeePointFlyBridge:
                 "x": goal.pose.position.x,
                 "y": goal.pose.position.y,
                 "z": goal.pose.position.z,
+                "yaw": tf.transformations.euler_from_quaternion(
+                    [
+                        goal.pose.orientation.x,
+                        goal.pose.orientation.y,
+                        goal.pose.orientation.z,
+                        goal.pose.orientation.w,
+                    ]
+                )[2],
                 "frame_id": goal.header.frame_id,
             },
         }

@@ -80,6 +80,24 @@ class ControlInterfaceNode:
         self.rate_hz = rospy.get_param("~rate_hz", 50.0)
         self.direct_position_timeout = rospy.get_param("~direct_position_timeout", 5.0)
         self.spf_position_timeout = rospy.get_param("~spf_position_timeout", 0.0)
+        self.spf_release_on_arrival = bool(
+            rospy.get_param("~spf_release_on_arrival", True)
+        )
+        self.spf_arrival_tolerance_xy = max(
+            0.0, float(rospy.get_param("~spf_arrival_tolerance_xy", 0.25))
+        )
+        self.spf_arrival_tolerance_z = max(
+            0.0, float(rospy.get_param("~spf_arrival_tolerance_z", 0.20))
+        )
+        self.spf_arrival_tolerance_yaw_deg = max(
+            0.0, float(rospy.get_param("~spf_arrival_tolerance_yaw_deg", 10.0))
+        )
+        self.spf_arrival_max_speed = max(
+            0.0, float(rospy.get_param("~spf_arrival_max_speed", 0.25))
+        )
+        self.spf_arrival_settle_sec = max(
+            0.0, float(rospy.get_param("~spf_arrival_settle_sec", 0.5))
+        )
         self.speed_timeout = rospy.get_param("~speed_timeout", 0.6)
         self.ego_cmd_timeout = rospy.get_param("~ego_cmd_timeout", 0.6)
         self.max_speed = rospy.get_param("~max_speed", 1.0)
@@ -133,6 +151,7 @@ class ControlInterfaceNode:
         self.direct_target = None
         self.direct_yaw = 0.0
         self.direct_stamp = rospy.Time(0)
+        self.spf_arrival_since = None
         self.speed_target = None
         self.speed_yaw_rate = 0.0
         self.speed_reference = None
@@ -247,6 +266,7 @@ class ControlInterfaceNode:
         self.direct_target = (x, y, _clamp(z, self.min_z, self.max_z))
         self.direct_yaw = yaw
         self.direct_stamp = now
+        self._reset_spf_arrival_locked()
         self.motion_rearm_required = False
         self.mode = mode
         self._publish_status(mode, "accepted")
@@ -270,6 +290,7 @@ class ControlInterfaceNode:
             self.speed_yaw_rate = _clamp(yaw_rate, -math.pi, math.pi)
             self.speed_reference = self._current_pose_tuple()
             self.speed_stamp = now
+            self._reset_spf_arrival_locked()
             self.motion_rearm_required = False
             self.mode = "speed"
             self._publish_status("speed", "accepted")
@@ -296,6 +317,7 @@ class ControlInterfaceNode:
             yaw_msg.data = math.degrees(yaw)
             self.yaw_pub.publish(yaw_msg)
             self.latest_ego_cmd = None
+            self._reset_spf_arrival_locked()
             self.motion_rearm_required = False
             self.mode = "ego_passthrough"
             self._publish_status("ego_position", "published planning goal")
@@ -318,6 +340,7 @@ class ControlInterfaceNode:
             self.direct_target = (x, y, _clamp(z, self.min_z, self.max_z))
             self.direct_yaw = yaw
             self.direct_stamp = rospy.Time.now()
+            self._reset_spf_arrival_locked()
             self.mode = "direct_position"
             self._publish_status("stop", "holding current position")
 
@@ -360,16 +383,26 @@ class ControlInterfaceNode:
                     self._clear_spf_target_locked()
                     self._publish_status("reject_spf_position", execution_error)
                 elif self._position_active(now):
-                    self.output_pub.publish(
-                        self._build_position_cmd(
-                            self.direct_target,
-                            (0.0, 0.0, 0.0),
-                            self.direct_yaw,
+                    if self._spf_arrival_settled_locked(now):
+                        self._release_spf_to_hover_locked()
+                        self._publish_status(
+                            "spf_hover_wait",
+                            "goal reached and settled; released position command for PX4Ctrl AUTO_HOVER",
                         )
-                    )
-                    spf_position_published = True
+                    else:
+                        self.output_pub.publish(
+                            self._build_position_cmd(
+                                self.direct_target,
+                                (0.0, 0.0, 0.0),
+                                self.direct_yaw,
+                            )
+                        )
+                        spf_position_published = True
 
         if spf_position_published:
+            pass
+        elif self.mode == "spf_hover_wait":
+            # Silence the command stream so px4ctrl can time out into AUTO_HOVER.
             pass
         elif self.mode == "direct_position" and self._position_active(now):
             self.output_pub.publish(self._build_position_cmd(self.direct_target, (0.0, 0.0, 0.0), self.direct_yaw))
@@ -442,6 +475,7 @@ class ControlInterfaceNode:
         self.speed_target = None
         self.speed_reference = None
         self.latest_ego_cmd = None
+        self._reset_spf_arrival_locked()
         self.motion_rearm_required = True
 
     def _spf_execution_error_locked(self, now):
@@ -464,10 +498,67 @@ class ControlInterfaceNode:
     def _clear_spf_target_locked(self):
         if self.mode != "spf_position":
             return False
+        return self._release_spf_to_hover_locked()
+
+    def _release_spf_to_hover_locked(self):
+        if self.mode != "spf_position":
+            return False
         self.direct_target = None
         self.direct_stamp = rospy.Time(0)
-        self.mode = "ego_passthrough"
+        self.latest_ego_cmd = None
+        self.latest_ego_stamp = rospy.Time(0)
+        self.speed_target = None
+        self.speed_reference = None
+        self._reset_spf_arrival_locked()
+        self.motion_rearm_required = True
+        self.mode = "spf_hover_wait"
         return True
+
+    def _reset_spf_arrival_locked(self):
+        self.spf_arrival_since = None
+
+    def _spf_arrival_settled_locked(self, now):
+        if not self.spf_release_on_arrival or self.odom is None or self.direct_target is None:
+            self._reset_spf_arrival_locked()
+            return False
+
+        pose = self.odom.pose.pose.position
+        velocity = self.odom.twist.twist.linear
+        dx = float(pose.x) - self.direct_target[0]
+        dy = float(pose.y) - self.direct_target[1]
+        dz = float(pose.z) - self.direct_target[2]
+        yaw_error = abs(
+            _normalize_angle(_yaw_from_quaternion(self.odom.pose.pose.orientation) - self.direct_yaw)
+        )
+        speed = math.sqrt(
+            float(velocity.x) ** 2
+            + float(velocity.y) ** 2
+            + float(velocity.z) ** 2
+        )
+        values = (dx, dy, dz, yaw_error, speed)
+        if not all(math.isfinite(value) for value in values):
+            self._reset_spf_arrival_locked()
+            return False
+
+        arrived = (
+            math.hypot(dx, dy) <= self.spf_arrival_tolerance_xy
+            and abs(dz) <= self.spf_arrival_tolerance_z
+            and math.degrees(yaw_error) <= self.spf_arrival_tolerance_yaw_deg
+            and speed <= self.spf_arrival_max_speed
+        )
+        if not arrived:
+            self._reset_spf_arrival_locked()
+            return False
+
+        if self.spf_arrival_since is None:
+            self.spf_arrival_since = now
+            return self.spf_arrival_settle_sec <= 0.0
+
+        settled_for = (now - self.spf_arrival_since).to_sec()
+        if settled_for < 0.0:
+            self.spf_arrival_since = now
+            return False
+        return settled_for >= self.spf_arrival_settle_sec
 
     def _position_active(self, now):
         if self.direct_target is None:

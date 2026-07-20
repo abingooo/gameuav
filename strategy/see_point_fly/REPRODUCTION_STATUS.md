@@ -1,6 +1,6 @@
 # SPF Reproduction Status
 
-Last audited: 2026-07-18
+Last audited: 2026-07-20
 
 ## Author Sources
 
@@ -57,6 +57,7 @@ Each active task requires five repetitions. A collision is a failure. At
 completion, the requested task must be satisfied or the target must be clearly
 visible in the final egocentric view and lie within `1 m`. Local position-goal
 arrival is not semantic success; the operator must apply the paper criterion.
+The author SPF output has no task-level `final` or `done` signal.
 
 ## Local Platform Boundary
 
@@ -80,6 +81,18 @@ platform bounds are `1.5 m` horizontal step, `0.3 m` vertical step, and
 `0.4-1.5 m` target altitude. These PX4 integration bounds and the switch from
 timed RC primitives to a position setpoint mean local results are a faithful
 author-policy port, not a numerical reproduction of the Tello dynamics.
+
+The GameUAV control adapter defines local-goal arrival as XY error `<=0.25 m`,
+Z error `<=0.20 m`, yaw error `<=10 deg`, and three-dimensional speed
+`<=0.25 m/s`, all held continuously for `0.5 s`. It then clears cached SPF/EGO
+motion commands and stops `/control/position_cmd`; after PX4Ctrl's configured
+`0.5 s` command timeout, `CMD_CTRL` returns to `AUTO_HOVER`. A one-shot command
+or manual target remains hovering. Only the continuous `/spf/task/start` loop
+requests another inference after its inter-cycle delay, and a new target returns
+PX4Ctrl to `CMD_CTRL`. This is GameUAV/PX4Ctrl integration behavior, not an
+author-policy capability or semantic completion signal. Any terminal continuous
+task result closes `/spf/enable`, invalidating the active point and late worker
+responses; a subsequent task requires explicit re-enable.
 
 Every SPF goal publication requires the shared `/spf/enable` session gate plus
 fresh, connected, armed MAVROS state. The continuous loop subscribes to the same
@@ -109,6 +122,9 @@ it; results cannot be attributed to the planning methods alone.
 - Primary mode: live worker reports `adaptive_mode`.
 - EGO occupancy projection: live ROS parameter is `false`.
 - Direct SPF to px4ctrl topic routing: live ROS graph verified.
+- Arrival release: configured for the thresholds above and covered by adapter
+  tests; the resulting PX4Ctrl state transition still requires real-flight
+  verification.
 - Armed-state publication gate and disabled tabletop execution: verified live;
   a disarmed task prompt was rejected before worker inference and produced no
   `/control/spf_position` message.

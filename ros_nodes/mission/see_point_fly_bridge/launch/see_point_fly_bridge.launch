@@ -21,7 +21,6 @@
     <param name="goal_topic" value="$(arg goal_topic)"/>
     <param name="status_topic" value="$(arg status_topic)"/>
     <param name="mavros_state_topic" value="/mavros/state"/>
-    <param name="stop_topic" value="/control/stop"/>
 
     <param name="manual_enable_required" value="true"/>
     <param name="require_armed_for_execution" value="true"/>
@@ -56,15 +55,15 @@
     <param name="last_goal_topic" value="/spf/last_goal"/>
     <param name="odom_topic" value="$(arg odom_topic)"/>
     <param name="mavros_state_topic" value="/mavros/state"/>
-    <param name="stop_topic" value="/control/stop"/>
 
     <param name="goal_ack_timeout_sec" value="95.0"/>
     <param name="goal_timeout_sec" value="45.0"/>
     <param name="task_timeout_sec" value="300.0"/>
     <param name="cycle_delay_sec" value="1.0"/>
-    <param name="arrival_settle_sec" value="1.0"/>
+    <param name="arrival_settle_sec" value="0.5"/>
     <param name="goal_tolerance_xy" value="0.25"/>
     <param name="goal_tolerance_z" value="0.20"/>
+    <param name="goal_tolerance_yaw_deg" value="10.0"/>
     <param name="arrival_max_speed" value="0.25"/>
     <param name="odom_timeout_sec" value="1.0"/>
     <param name="min_start_z" value="0.4"/>

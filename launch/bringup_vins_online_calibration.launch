@@ -1,0 +1,11 @@
+<launch>
+  <!-- Sensor-only calibration node. MAVROS and RealSense must be started separately. -->
+  <arg name="config_file" default="$(find vins)/../config/fast_drone_250_online_calibration.yaml"/>
+
+  <node name="vins_fusion"
+        pkg="vins"
+        type="vins_node"
+        output="screen"
+        launch-prefix="$(find vins)/scripts/wait_for_vins_inputs.py"
+        args="$(arg config_file)"/>
+</launch>

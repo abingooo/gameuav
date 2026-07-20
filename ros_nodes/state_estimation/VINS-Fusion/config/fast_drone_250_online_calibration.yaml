@@ -1,0 +1,70 @@
+%YAML:1.0
+
+# Calibration-only profile. Do not use this configuration for flight control.
+imu: 1
+num_of_cam: 2
+
+imu_topic: "/mavros/imu/data"
+image0_topic: "/camera/infra1/image_rect_raw"
+image1_topic: "/camera/infra2/image_rect_raw"
+
+output_path: "/home/uav/Desktop/uav_project/gameuav/runtime/vins_online_calibration"
+save_result: 1
+
+# The live image_rect_raw camera_info reports rectified images with D=0.
+cam0_calib: "left_online_calibration.yaml"
+cam1_calib: "right_online_calibration.yaml"
+image_width: 640
+image_height: 480
+
+# Optimize around the 2025 Kalibr T_ic results. These are initial guesses only.
+estimate_extrinsic: 1
+body_T_cam0: !!opencv-matrix
+   rows: 4
+   cols: 4
+   dt: d
+   data: [0.03379380594470763, 0.05601212478763401,
+          0.9978580162310398, 0.00128844,
+          -0.9989645778958667, 0.03232157397731991,
+          0.032016994939590815, -0.00405034,
+          -0.03045900177459182, -0.9979067880981687,
+          0.05704639759434649, 0.00908112,
+          0.0, 0.0, 0.0, 1.0]
+body_T_cam1: !!opencv-matrix
+   rows: 4
+   cols: 4
+   dt: d
+   data: [0.02889302320286455, 0.05381804686917452,
+          0.9981326620451745, 0.00404231,
+          -0.9991442563064732, 0.03112077250143938,
+          0.02724431332771432, -0.05578878,
+          -0.029596423770174518, -0.9980656868914497,
+          0.054671165616943435, 0.00558867,
+          0.0, 0.0, 0.0, 1.0]
+
+multiple_thread: 1
+
+max_cnt: 150
+min_dist: 30
+freq: 10
+F_threshold: 1.0
+show_track: 1
+flow_back: 1
+
+max_solver_time: 0.04
+max_num_iterations: 8
+keyframe_parallax: 10.0
+
+# Values from the existing IMU noise calibration; revalidate for the live topic.
+acc_n: 0.02622310268743605
+gyr_n: 0.060450171300378906
+acc_w: 0.000684458766347085
+gyr_w: 0.0016224083807518657
+g_norm: 9.805
+
+estimate_td: 1
+td: 0.0034930345815077234
+
+load_previous_pose_graph: 0
+pose_graph_save_path: "/home/uav/Desktop/uav_project/gameuav/runtime/vins_online_calibration/pose_graph"
+save_image: 0

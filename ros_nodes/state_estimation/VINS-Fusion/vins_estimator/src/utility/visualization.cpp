@@ -88,21 +88,32 @@ void printStatistics(const Estimator &estimator, double t)
     if (ESTIMATE_EXTRINSIC)
     {
         cv::FileStorage fs(EX_CALIB_RESULT_PATH, cv::FileStorage::WRITE);
-        for (int i = 0; i < NUM_OF_CAM; i++)
+        if (!fs.isOpened())
         {
-            //ROS_DEBUG("calibration result for camera %d", i);
-            ROS_DEBUG_STREAM("extirnsic tic: " << estimator.tic[i].transpose());
-            ROS_DEBUG_STREAM("extrinsic ric: " << Utility::R2ypr(estimator.ric[i]).transpose());
+            ROS_ERROR_THROTTLE(1.0, "failed to open online calibration output: %s", EX_CALIB_RESULT_PATH.c_str());
+        }
+        else
+        {
+            fs << "timestamp" << ros::Time::now().toSec();
+            fs << "extrinsic_optimization_open" << static_cast<int>(estimator.openExEstimation);
+            fs << "speed_norm" << estimator.Vs[WINDOW_SIZE].norm();
+            fs << "td" << estimator.td;
+            fs << "td_optimization_active" << static_cast<int>(ESTIMATE_TD && estimator.Vs[0].norm() >= 0.2);
+            for (int i = 0; i < NUM_OF_CAM; i++)
+            {
+                ROS_DEBUG_STREAM("extirnsic tic: " << estimator.tic[i].transpose());
+                ROS_DEBUG_STREAM("extrinsic ric: " << Utility::R2ypr(estimator.ric[i]).transpose());
 
-            Eigen::Matrix4d eigen_T = Eigen::Matrix4d::Identity();
-            eigen_T.block<3, 3>(0, 0) = estimator.ric[i];
-            eigen_T.block<3, 1>(0, 3) = estimator.tic[i];
-            cv::Mat cv_T;
-            cv::eigen2cv(eigen_T, cv_T);
-            if(i == 0)
-                fs << "body_T_cam0" << cv_T ;
-            else
-                fs << "body_T_cam1" << cv_T ;
+                Eigen::Matrix4d eigen_T = Eigen::Matrix4d::Identity();
+                eigen_T.block<3, 3>(0, 0) = estimator.ric[i];
+                eigen_T.block<3, 1>(0, 3) = estimator.tic[i];
+                cv::Mat cv_T;
+                cv::eigen2cv(eigen_T, cv_T);
+                if(i == 0)
+                    fs << "body_T_cam0" << cv_T;
+                else
+                    fs << "body_T_cam1" << cv_T;
+            }
         }
         fs.release();
     }
@@ -117,8 +128,9 @@ void printStatistics(const Estimator &estimator, double t)
     sum_of_path += (estimator.Ps[WINDOW_SIZE] - last_path).norm();
     last_path = estimator.Ps[WINDOW_SIZE];
     ROS_DEBUG("sum of path %f", sum_of_path);
-    // if (ESTIMATE_TD)
-        // ROS_INFO("td %f", estimator.td);
+    if (ESTIMATE_TD)
+        ROS_INFO_THROTTLE(1.0, "online calibration: td=%.6f speed=%.3f extrinsic_open=%d",
+                          estimator.td, estimator.Vs[WINDOW_SIZE].norm(), estimator.openExEstimation);
 }
 
 void pubOdometry(const Estimator &estimator, const std_msgs::Header &header)

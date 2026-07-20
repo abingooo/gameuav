@@ -20,6 +20,12 @@
   <arg name="configure_mavros_stream_rates" default="true"/>
   <arg name="control_ego_position_cmd_topic" default="/control/ego_position_cmd"/>
   <arg name="control_output_position_cmd_topic" default="/control/position_cmd"/>
+  <arg name="spf_release_on_arrival" default="true"/>
+  <arg name="spf_arrival_tolerance_xy" default="0.25"/>
+  <arg name="spf_arrival_tolerance_z" default="0.20"/>
+  <arg name="spf_arrival_tolerance_yaw_deg" default="10.0"/>
+  <arg name="spf_arrival_max_speed" default="0.25"/>
+  <arg name="spf_arrival_settle_sec" default="0.5"/>
 
   <include file="$(dirname)/bringup_flight_control.launch">
     <arg name="fcu_url" value="$(arg fcu_url)"/>
@@ -34,6 +40,12 @@
     <arg name="configure_mavros_stream_rates" value="$(arg configure_mavros_stream_rates)"/>
     <arg name="control_ego_position_cmd_topic" value="$(arg control_ego_position_cmd_topic)"/>
     <arg name="control_output_position_cmd_topic" value="$(arg control_output_position_cmd_topic)"/>
+    <arg name="spf_release_on_arrival" value="$(arg spf_release_on_arrival)"/>
+    <arg name="spf_arrival_tolerance_xy" value="$(arg spf_arrival_tolerance_xy)"/>
+    <arg name="spf_arrival_tolerance_z" value="$(arg spf_arrival_tolerance_z)"/>
+    <arg name="spf_arrival_tolerance_yaw_deg" value="$(arg spf_arrival_tolerance_yaw_deg)"/>
+    <arg name="spf_arrival_max_speed" value="$(arg spf_arrival_max_speed)"/>
+    <arg name="spf_arrival_settle_sec" value="$(arg spf_arrival_settle_sec)"/>
   </include>
 
   <include file="$(dirname)/bringup_ego.launch">

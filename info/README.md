@@ -13,3 +13,7 @@ Render the `.mmd` files with any Mermaid renderer, or paste them into a Markdown
 - `06_spf_smpf_six_tasks.md`: code-level SPF/SMPF implementation, completion semantics,
   and verification boundaries for Navigation, Obstacle Avoidance, Long-Horizon,
   Reasoning, Search, and Follow.
+- `07_vins_online_calibration_2026-07-19.md`: sensor-only VINS calibration result,
+  fixed parameters, and validation evidence.
+- `08_spf_position_manual_target.md`: safe manual target injection, coordinate
+  conventions, execution gates, and downstream SPF-to-px4ctrl verification.

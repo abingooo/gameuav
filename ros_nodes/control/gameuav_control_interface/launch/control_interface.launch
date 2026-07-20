@@ -14,6 +14,12 @@
   <arg name="planning_yaw_topic" default="/planning/goal_yaw_deg"/>
   <arg name="rate_hz" default="50.0"/>
   <arg name="spf_position_timeout" default="0.0"/>
+  <arg name="spf_release_on_arrival" default="true"/>
+  <arg name="spf_arrival_tolerance_xy" default="0.25"/>
+  <arg name="spf_arrival_tolerance_z" default="0.20"/>
+  <arg name="spf_arrival_tolerance_yaw_deg" default="10.0"/>
+  <arg name="spf_arrival_max_speed" default="0.25"/>
+  <arg name="spf_arrival_settle_sec" default="0.5"/>
   <arg name="max_speed" default="1.0"/>
   <arg name="max_vertical_speed" default="0.5"/>
   <arg name="min_z" default="0.05"/>
@@ -39,6 +45,12 @@
     <param name="planning_yaw_topic" value="$(arg planning_yaw_topic)"/>
     <param name="rate_hz" value="$(arg rate_hz)"/>
     <param name="spf_position_timeout" value="$(arg spf_position_timeout)"/>
+    <param name="spf_release_on_arrival" value="$(arg spf_release_on_arrival)"/>
+    <param name="spf_arrival_tolerance_xy" value="$(arg spf_arrival_tolerance_xy)"/>
+    <param name="spf_arrival_tolerance_z" value="$(arg spf_arrival_tolerance_z)"/>
+    <param name="spf_arrival_tolerance_yaw_deg" value="$(arg spf_arrival_tolerance_yaw_deg)"/>
+    <param name="spf_arrival_max_speed" value="$(arg spf_arrival_max_speed)"/>
+    <param name="spf_arrival_settle_sec" value="$(arg spf_arrival_settle_sec)"/>
     <param name="max_speed" value="$(arg max_speed)"/>
     <param name="max_vertical_speed" value="$(arg max_vertical_speed)"/>
     <param name="min_z" value="$(arg min_z)"/>

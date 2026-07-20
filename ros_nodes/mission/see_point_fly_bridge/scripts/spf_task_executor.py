@@ -9,11 +9,26 @@ import uuid
 import rospy
 from mavros_msgs.msg import State
 from nav_msgs.msg import Odometry
-from std_msgs.msg import Bool, Empty, String
+from std_msgs.msg import Bool, String
 
 
 ACTIVE_STATES = {"WAITING_GOAL", "WAITING_ARRIVAL", "WAITING_NEXT"}
 TERMINAL_STATES = {"SUCCESS", "TIMEOUT", "ABORTED", "ERROR"}
+
+
+def _normalize_angle(angle):
+    while angle > math.pi:
+        angle -= 2.0 * math.pi
+    while angle < -math.pi:
+        angle += 2.0 * math.pi
+    return angle
+
+
+def _yaw_from_quaternion(q):
+    return math.atan2(
+        2.0 * (q.w * q.z + q.x * q.y),
+        1.0 - 2.0 * (q.y * q.y + q.z * q.z),
+    )
 
 
 class TaskLoopError(RuntimeError):
@@ -33,9 +48,10 @@ class TaskLoop:
         goal_timeout_sec=45.0,
         task_timeout_sec=300.0,
         cycle_delay_sec=1.0,
-        arrival_settle_sec=1.0,
+        arrival_settle_sec=0.5,
         goal_tolerance_xy=0.25,
         goal_tolerance_z=0.20,
+        goal_tolerance_yaw_deg=10.0,
         arrival_max_speed=0.25,
         odom_timeout_sec=1.0,
         min_start_z=0.4,
@@ -54,6 +70,7 @@ class TaskLoop:
         self.arrival_settle_sec = float(arrival_settle_sec)
         self.goal_tolerance_xy = float(goal_tolerance_xy)
         self.goal_tolerance_z = float(goal_tolerance_z)
+        self.goal_tolerance_yaw_deg = float(goal_tolerance_yaw_deg)
         self.arrival_max_speed = float(arrival_max_speed)
         self.odom_timeout_sec = float(odom_timeout_sec)
         self.min_start_z = float(min_start_z)
@@ -81,6 +98,7 @@ class TaskLoop:
         self.next_cycle_at = None
         self.distance_xy = None
         self.distance_z = None
+        self.distance_yaw_deg = None
         self.speed = None
         self.last_rejection = None
         self.last_rejection_at = None
@@ -92,8 +110,9 @@ class TaskLoop:
             if self.state in ACTIVE_STATES:
                 self._finish("ABORTED", "task execution disabled", now)
             self.enabled = False
-            self.state = "DISABLED"
-            self.reason = "task execution is disabled"
+            if self.state not in TERMINAL_STATES:
+                self.state = "DISABLED"
+                self.reason = "task execution is disabled"
             self.last_rejection = None
             self.last_rejection_at = None
             self.updated_at = now
@@ -145,6 +164,7 @@ class TaskLoop:
                 "x": float(goal["x"]),
                 "y": float(goal["y"]),
                 "z": float(goal["z"]),
+                "yaw": float(goal.get("yaw", 0.0)),
             }
         except (KeyError, TypeError, ValueError):
             return False
@@ -212,12 +232,17 @@ class TaskLoop:
         dx = float(odom["x"]) - self.current_goal["x"]
         dy = float(odom["y"]) - self.current_goal["y"]
         dz = float(odom["z"]) - self.current_goal["z"]
+        yaw_error = abs(
+            _normalize_angle(float(odom.get("yaw", 0.0)) - self.current_goal["yaw"])
+        )
         self.distance_xy = math.hypot(dx, dy)
         self.distance_z = abs(dz)
+        self.distance_yaw_deg = math.degrees(yaw_error)
         self.speed = float(odom["speed"])
         arrived = (
             self.distance_xy <= self.goal_tolerance_xy
             and self.distance_z <= self.goal_tolerance_z
+            and self.distance_yaw_deg <= self.goal_tolerance_yaw_deg
             and self.speed <= self.arrival_max_speed
         )
         if not arrived:
@@ -255,6 +280,7 @@ class TaskLoop:
             "current_goal": self.current_goal,
             "distance_xy": self.distance_xy,
             "distance_z": self.distance_z,
+            "distance_yaw_deg": self.distance_yaw_deg,
             "speed": self.speed,
             "last_rejection": self.last_rejection,
             "last_rejection_at": self.last_rejection_at,
@@ -276,6 +302,7 @@ class TaskLoop:
         self.next_cycle_at = None
         self.distance_xy = None
         self.distance_z = None
+        self.distance_yaw_deg = None
         self.state = "WAITING_GOAL"
         self.reason = "requesting SPF inference for action %d" % self.cycle_count
         self.updated_at = now
@@ -305,6 +332,7 @@ class TaskLoop:
         self.next_cycle_at = None
         self.distance_xy = None
         self.distance_z = None
+        self.distance_yaw_deg = None
         self.speed = None
 
     def _validate_start_odom(self, now, odom, vehicle_state=None):
@@ -362,6 +390,7 @@ class TaskLoop:
             return False
         try:
             values = [float(odom[key]) for key in ("stamp", "x", "y", "z", "speed")]
+            values.append(float(odom.get("yaw", 0.0)))
         except (KeyError, TypeError, ValueError):
             return False
         return all(math.isfinite(value) for value in values) and now - values[0] <= self.odom_timeout_sec
@@ -377,16 +406,15 @@ class SpfTaskExecutorNode:
         self.last_goal_topic = rospy.get_param("~last_goal_topic", "/spf/last_goal")
         self.odom_topic = rospy.get_param("~odom_topic", "/vins_fusion/imu_propagate")
         self.mavros_state_topic = rospy.get_param("~mavros_state_topic", "/mavros/state")
-        self.stop_topic = rospy.get_param("~stop_topic", "/control/stop")
-
         self.loop = TaskLoop(
             goal_ack_timeout_sec=rospy.get_param("~goal_ack_timeout_sec", 95.0),
             goal_timeout_sec=rospy.get_param("~goal_timeout_sec", 45.0),
             task_timeout_sec=rospy.get_param("~task_timeout_sec", 300.0),
             cycle_delay_sec=rospy.get_param("~cycle_delay_sec", 1.0),
-            arrival_settle_sec=rospy.get_param("~arrival_settle_sec", 1.0),
+            arrival_settle_sec=rospy.get_param("~arrival_settle_sec", 0.5),
             goal_tolerance_xy=rospy.get_param("~goal_tolerance_xy", 0.25),
             goal_tolerance_z=rospy.get_param("~goal_tolerance_z", 0.20),
+            goal_tolerance_yaw_deg=rospy.get_param("~goal_tolerance_yaw_deg", 10.0),
             arrival_max_speed=rospy.get_param("~arrival_max_speed", 0.25),
             odom_timeout_sec=rospy.get_param("~odom_timeout_sec", 1.0),
             min_start_z=rospy.get_param("~min_start_z", 0.4),
@@ -406,7 +434,7 @@ class SpfTaskExecutorNode:
         self.last_status_publish_at = 0.0
 
         self.command_pub = rospy.Publisher(self.command_topic, String, queue_size=1)
-        self.stop_pub = rospy.Publisher(self.stop_topic, Empty, queue_size=1)
+        self.enable_pub = rospy.Publisher(self.enable_topic, Bool, queue_size=1)
         self.status_pub = rospy.Publisher(self.status_topic, String, queue_size=1, latch=True)
         rospy.Subscriber(self.start_topic, String, self.start_callback, queue_size=1)
         rospy.Subscriber(self.control_topic, String, self.control_callback, queue_size=5)
@@ -420,11 +448,13 @@ class SpfTaskExecutorNode:
     def odom_callback(self, msg):
         velocity = msg.twist.twist.linear
         position = msg.pose.pose.position
+        yaw = _yaw_from_quaternion(msg.pose.pose.orientation)
         odom = {
             "stamp": time.time(),
             "x": position.x,
             "y": position.y,
             "z": position.z,
+            "yaw": yaw,
             "speed": math.sqrt(velocity.x ** 2 + velocity.y ** 2 + velocity.z ** 2),
         }
         with self.lock:
@@ -437,18 +467,18 @@ class SpfTaskExecutorNode:
             "armed": bool(msg.armed),
             "mode": msg.mode,
         }
-        stop_required = False
+        close_gate_required = False
         with self.lock:
             self.vehicle_state = vehicle_state
             if self.loop.enabled and (not msg.connected or not msg.armed):
                 self.loop.set_enabled(False, time.time())
-                stop_required = True
-        if stop_required:
-            self.stop_pub.publish(Empty())
-            self.publish_status(force=True)
+                self.publish_status(force=True)
+                close_gate_required = True
+        if close_gate_required:
+            self.enable_pub.publish(Bool(data=False))
 
     def enable_callback(self, msg):
-        stop_required = False
+        close_gate_required = False
         now = time.time()
         with self.lock:
             requested = bool(msg.data)
@@ -460,20 +490,19 @@ class SpfTaskExecutorNode:
                     and state["armed"]
                 )
                 if not state_ready:
-                    stop_required = self.loop.enabled
                     self.loop.set_enabled(False, now)
                     rejection = "fresh connected and armed MAVROS state is required to enable SPF"
                     self.loop.record_rejection(rejection, now)
                     self.publish_status(force=True, rejection=rejection)
+                    close_gate_required = True
                 else:
                     self.loop.set_enabled(True, now)
                     self.publish_status(force=True)
             else:
-                stop_required = self.loop.enabled and not requested
                 self.loop.set_enabled(requested, now)
                 self.publish_status(force=True)
-        if stop_required:
-            self.stop_pub.publish(Empty())
+        if close_gate_required:
+            self.enable_pub.publish(Bool(data=False))
 
     def start_callback(self, msg):
         with self.lock:
@@ -488,14 +517,12 @@ class SpfTaskExecutorNode:
             self.publish_status(force=True)
 
     def control_callback(self, msg):
-        stop_required = False
+        close_gate_required = False
         with self.lock:
             try:
-                stop_required = (
-                    self.loop.state in ACTIVE_STATES
-                    and str(msg.data or "").strip().lower() in {"abort", "stop"}
-                )
+                was_active = self.loop.state in ACTIVE_STATES
                 events = self.loop.control(msg.data, time.time())
+                close_gate_required = was_active and self.loop.state in TERMINAL_STATES
             except TaskLoopError as exc:
                 rospy.logwarn("spf_task_executor: rejected control: %s", exc)
                 self.loop.record_rejection(str(exc), time.time())
@@ -503,8 +530,8 @@ class SpfTaskExecutorNode:
                 return
             self.handle_events(events)
             self.publish_status(force=True)
-        if stop_required:
-            self.stop_pub.publish(Empty())
+        if close_gate_required:
+            self.enable_pub.publish(Bool(data=False))
 
     def last_goal_callback(self, msg):
         try:
@@ -516,7 +543,7 @@ class SpfTaskExecutorNode:
                 self.publish_status(force=True)
 
     def timer_callback(self, _event):
-        stop_required = False
+        close_gate_required = False
         with self.lock:
             now = time.time()
             state = self.vehicle_state
@@ -533,13 +560,15 @@ class SpfTaskExecutorNode:
                 rejection = "SPF execution gate closed because MAVROS state became stale or unavailable"
                 self.loop.record_rejection(rejection, now)
                 self.publish_status(force=True, rejection=rejection)
-                stop_required = True
+                close_gate_required = True
             else:
+                was_active = self.loop.state in ACTIVE_STATES
                 events = self.loop.tick(now, self.odom)
+                close_gate_required = was_active and self.loop.state in TERMINAL_STATES
                 self.handle_events(events)
                 self.publish_status()
-        if stop_required:
-            self.stop_pub.publish(Empty())
+        if close_gate_required:
+            self.enable_pub.publish(Bool(data=False))
 
     def handle_events(self, events):
         for event, value in events:

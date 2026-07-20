@@ -4,7 +4,6 @@ model_type: PINHOLE
 camera_name: camera
 image_width: 640
 image_height: 480
-# Values reported by /camera/infra1/camera_info for image_rect_raw.
 distortion_parameters:
    k1: 0.0
    k2: 0.0

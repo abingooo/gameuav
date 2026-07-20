@@ -1,0 +1,61 @@
+%YAML:1.0
+
+# Fixed candidate generated from the 2026-07-19 sensor-only online calibration.
+imu: 1
+num_of_cam: 2
+
+imu_topic: "/mavros/imu/data"
+image0_topic: "/camera/infra1/image_rect_raw"
+image1_topic: "/camera/infra2/image_rect_raw"
+
+output_path: "/home/uav/Desktop/uav_project/gameuav/runtime/vins_candidate_validation"
+save_result: 1
+
+cam0_calib: "left_online_calibration.yaml"
+cam1_calib: "right_online_calibration.yaml"
+image_width: 640
+image_height: 480
+
+estimate_extrinsic: 0
+body_T_cam0: !!opencv-matrix
+   rows: 4
+   cols: 4
+   dt: d
+   data: [0.014638988089, -0.109344922117, 0.993896065006, 0.197280935879,
+          -0.999818945432, -0.013685471546, 0.013220598486, 0.012108401154,
+          0.012156331006, -0.993909651767, -0.109525466174, -0.058644040603,
+          0.0, 0.0, 0.0, 1.0]
+body_T_cam1: !!opencv-matrix
+   rows: 4
+   cols: 4
+   dt: d
+   data: [0.014473096227, -0.109867777897, 0.993840832762, 0.197604248543,
+          -0.999820328622, -0.013758242686, 0.013039219005, -0.037236184107,
+          0.012240913351, -0.993850985882, -0.110047162172, -0.057138223628,
+          0.0, 0.0, 0.0, 1.0]
+
+multiple_thread: 1
+
+max_cnt: 120
+min_dist: 30
+freq: 10
+F_threshold: 1.0
+show_track: 0
+flow_back: 1
+
+max_solver_time: 0.04
+max_num_iterations: 8
+keyframe_parallax: 10.0
+
+acc_n: 0.02622310268743605
+gyr_n: 0.060450171300378906
+acc_w: 0.000684458766347085
+gyr_w: 0.0016224083807518657
+g_norm: 9.805
+
+estimate_td: 0
+td: 0.012404321603
+
+load_previous_pose_graph: 0
+pose_graph_save_path: "/home/uav/Desktop/uav_project/gameuav/runtime/vins_candidate_validation/pose_graph"
+save_image: 0

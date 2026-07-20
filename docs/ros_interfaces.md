@@ -51,7 +51,7 @@ or `target_id`.
 | `/control/stop` | `std_msgs/Empty` | in | control interface | Hold current odometry position |
 | `/control/interface_status` | `std_msgs/String` | out | control interface | JSON status for command mode and rejection details |
 | `/control/ego_position_cmd` | `quadrotor_msgs/PositionCommand` | in | control interface | Remapped EGO trajectory command input in realflight/egoctrl |
-| `/control/spf_position` | `geometry_msgs/PoseStamped` | in | control interface | Persistent SPF direct position target; bypasses EGO |
+| `/control/spf_position` | `geometry_msgs/PoseStamped` | in | control interface | SPF direct position target; bypasses EGO and is released after the configured arrival condition settles |
 | `/control/position_cmd` | `quadrotor_msgs/PositionCommand` | out | control interface | Muxed command output to px4ctrl in realflight/egoctrl |
 | `/px4ctrl/takeoff_land` | `quadrotor_msgs/TakeoffLand` | in | px4ctrl | Takeoff/land command |
 | `/px4ctrl/hover_yaw_cmd` | `std_msgs/Float64` | in | px4ctrl | Hover yaw command, also published by EGO |
@@ -100,7 +100,7 @@ The UAV-side control facade exposes three command levels:
 |---|---|---|
 | `ego_position` | `/control/ego_position` | Converts a body-frame or world-frame pose into `/planning/goal`; EGO Planner keeps obstacle-aware trajectory generation. |
 | `position` | `/control/position` | Directly drives px4ctrl through `PositionCommand`; it does not perform obstacle planning. |
-| SPF position | `/control/spf_position` | Persistent SPF position target converted directly to px4ctrl `PositionCommand` until superseded. |
+| SPF position | `/control/spf_position` | SPF position target converted directly to px4ctrl `PositionCommand` until superseded or the configured arrival condition settles. |
 | `speed` | `/control/speed` | Integrates bounded velocity into a short-lived `PositionCommand`; refresh it continuously for manual jogging. |
 
 In `realflight`/`egoctrl`, EGO's `/position_cmd` output is remapped to
@@ -108,6 +108,24 @@ In `realflight`/`egoctrl`, EGO's `/position_cmd` output is remapped to
 The control interface passes EGO commands through unless a direct `position` or
 `speed` command is active. SPF uses the persistent `/control/spf_position` path
 and does not publish its target to EGO.
+
+With the real-flight defaults, an SPF target is considered settled only while
+XY error is at most `0.25 m`, Z error is at most `0.20 m`, yaw error is at most
+`10 deg`, and three-dimensional linear speed is at most `0.25 m/s` continuously
+for `0.5 s`. The control interface then enters `spf_hover_wait`, clears cached
+SPF/EGO motion commands, and stops publishing `/control/position_cmd`. PX4Ctrl's
+configured `0.5 s` command timeout consequently changes `CMD_CTRL` to
+`AUTO_HOVER`. A newly accepted SPF target resumes command publication and
+returns PX4Ctrl to `CMD_CTRL`.
+
+A one-shot `/spf/user_command` or a manual `/control/spf_position` therefore
+leaves the vehicle in hover after arrival. A continuous `/spf/task/start` loop
+requests the next SPF cycle after its inter-cycle delay. The upstream SPF model
+does not emit a task-level `final` or `done` result, so local-goal arrival is not
+semantic task success. Arrival release is GameUAV/PX4Ctrl integration behavior,
+not an added SPF model capability. Every terminal continuous-task result closes
+the shared `/spf/enable` gate, invalidating the active point and any late worker
+response; explicitly enable SPF again before starting another task.
 
 ## Gateway Mapping
 

@@ -137,6 +137,11 @@ modules:
     allowed_args:
       vins_launch: null
 
+  vins_online_calibration:
+    type: launch
+    description: Sensor-only VINS online extrinsic and time-offset calibration
+    file: launch/bringup_vins_online_calibration.launch
+
   ego:
     type: launch
     description: EGO-Planner local planner
@@ -209,6 +214,12 @@ modules:
       output_position_cmd_topic: "/control/position_cmd"
       spf_position_topic: "/control/spf_position"
       spf_position_timeout: "0.0"
+      spf_release_on_arrival: "true"
+      spf_arrival_tolerance_xy: "0.25"
+      spf_arrival_tolerance_z: "0.20"
+      spf_arrival_tolerance_yaw_deg: "10.0"
+      spf_arrival_max_speed: "0.25"
+      spf_arrival_settle_sec: "0.5"
     allowed_args:
       odom_topic: null
       ego_position_cmd_topic: null
@@ -222,6 +233,14 @@ modules:
       planning_yaw_topic: null
       rate_hz: null
       spf_position_timeout: null
+      spf_release_on_arrival:
+        - "true"
+        - "false"
+      spf_arrival_tolerance_xy: null
+      spf_arrival_tolerance_z: null
+      spf_arrival_tolerance_yaw_deg: null
+      spf_arrival_max_speed: null
+      spf_arrival_settle_sec: null
       max_speed: null
       max_vertical_speed: null
       min_z: null
@@ -262,6 +281,14 @@ modules:
         - "false"
       control_ego_position_cmd_topic: null
       control_output_position_cmd_topic: null
+      spf_release_on_arrival:
+        - "true"
+        - "false"
+      spf_arrival_tolerance_xy: null
+      spf_arrival_tolerance_z: null
+      spf_arrival_tolerance_yaw_deg: null
+      spf_arrival_max_speed: null
+      spf_arrival_settle_sec: null
 
   realflight:
     type: launch
@@ -274,6 +301,8 @@ modules:
       use_smpf: "false"
       smpf_execution_enabled: "false"
       smpf_llm_reasoning_effort: "low"
+      spf_release_on_arrival: "true"
+      spf_arrival_settle_sec: "0.5"
     allowed_args:
       fcu_url: null
       camera: null
@@ -320,6 +349,14 @@ modules:
         - "false"
       control_ego_position_cmd_topic: null
       control_output_position_cmd_topic: null
+      spf_release_on_arrival:
+        - "true"
+        - "false"
+      spf_arrival_tolerance_xy: null
+      spf_arrival_tolerance_z: null
+      spf_arrival_tolerance_yaw_deg: null
+      spf_arrival_max_speed: null
+      spf_arrival_settle_sec: null
 
   egoctrl:
     type: launch
@@ -342,6 +379,8 @@ modules:
       smpf_llm_reasoning_effort: "low"
       realsense_enable_sync: "true"
       realsense_align_depth: "true"
+      spf_release_on_arrival: "true"
+      spf_arrival_settle_sec: "0.5"
     allowed_args:
       fcu_url: null
       camera: null
@@ -388,6 +427,14 @@ modules:
         - "false"
       control_ego_position_cmd_topic: null
       control_output_position_cmd_topic: null
+      spf_release_on_arrival:
+        - "true"
+        - "false"
+      spf_arrival_tolerance_xy: null
+      spf_arrival_tolerance_z: null
+      spf_arrival_tolerance_yaw_deg: null
+      spf_arrival_max_speed: null
+      spf_arrival_settle_sec: null
 
   smpf:
     type: launch

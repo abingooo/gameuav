@@ -1,0 +1,9 @@
+<launch>
+  <!-- Fixed sensor-only candidate validation. No planner or controller is included. -->
+  <node name="vins_fusion"
+        pkg="vins"
+        type="vins_node"
+        output="screen"
+        launch-prefix="$(find vins)/scripts/wait_for_vins_inputs.py"
+        args="$(find vins)/../config/fast_drone_250_calibrated_candidate.yaml"/>
+</launch>

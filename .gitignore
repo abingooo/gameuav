@@ -32,6 +32,8 @@ core.*
 /runtime/smpf_trials*.jsonl
 /runtime/spf_smpf_outcomes*.jsonl
 /runtime/realsense_firmware/
+/runtime/vins_online_calibration/
+/runtime/vins_candidate_validation/
 
 # Local credentials and overrides
 .env

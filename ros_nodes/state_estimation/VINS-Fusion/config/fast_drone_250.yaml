@@ -23,53 +23,24 @@ image_width: 640
 image_height: 480
    
 
-# Extrinsic parameter between IMU and Camera.
-estimate_extrinsic: 0   # Use the calibrated transforms below; online optimization drifted while stationary.
-                        # 1  Have an initial guess about extrinsic parameters. We will optimize around your initial guess.
-
-# online
+# Fixed result from the 2026-07-19 sensor-only online calibration and validation.
+estimate_extrinsic: 0
 body_T_cam0: !!opencv-matrix
    rows: 4
    cols: 4
    dt: d
-   data: [ -2.1792499154815737e-03, -1.9012189238187427e-02,
-       9.9981687699807187e-01, 2.3460848181173172e-01,
-       -9.9999688249343355e-01, -1.1773141828781419e-03,
-       -2.2020296839793674e-03, -1.7820079802113198e-02,
-       1.2189639946306174e-03, -9.9981855883539517e-01,
-       -1.9009564305729310e-02, 3.3859462838956099e-02, 0., 0., 0., 1. ]
+   data: [0.014638988089, -0.109344922117, 0.993896065006, 0.197280935879,
+          -0.999818945432, -0.013685471546, 0.013220598486, 0.012108401154,
+          0.012156331006, -0.993909651767, -0.109525466174, -0.058644040603,
+          0.0, 0.0, 0.0, 1.0]
 body_T_cam1: !!opencv-matrix
    rows: 4
    cols: 4
    dt: d
-   data: [ -7.2738768496369843e-03, -2.3355546013193285e-02,
-       9.9970075982065865e-01, 2.1976104851172049e-01,
-       -9.9997317236156946e-01, -6.9318932714135251e-04,
-       -7.2920535993515334e-03, -6.9064874709730356e-02,
-       8.6329179041294557e-04, -9.9972698170999807e-01,
-       -2.3349877265250729e-02, 3.7421089901407092e-02, 0., 0., 0., 1. ]
-
-# # offline_param
-# body_T_cam0: !!opencv-matrix
-#    rows: 4
-#    cols: 4
-#    dt: d
-#    data: [0.03379381, 0.05601212, 
-#             0.99785802, 0.00128844, 
-#             -0.99896458, 0.03232157, 
-#             0.03201699, -0.00405034, 
-#             -0.030459, -0.99790679, 
-#             0.0570464, 0.00908112, 0., 0., 0., 1.]
-# body_T_cam1: !!opencv-matrix
-#    rows: 4
-#    cols: 4
-#    dt: d
-#    data: [0.02889302, 0.05381805, 
-#             0.99813266, 0.00404231, 
-#             -0.99914426, 0.03112077, 
-#             0.02724431, -0.05578878, 
-#             -0.02959642, -0.99806569, 
-#             0.05467117, 0.00558867, 0., 0., 0., 1.]
+   data: [0.014473096227, -0.109867777897, 0.993840832762, 0.197604248543,
+          -0.999820328622, -0.013758242686, 0.013039219005, -0.037236184107,
+          0.012240913351, -0.993850985882, -0.110047162172, -0.057138223628,
+          0.0, 0.0, 0.0, 1.0]
             
 #Multiple thread support
 multiple_thread: 1
@@ -88,15 +59,15 @@ max_num_iterations: 8   # max solver itrations, to guarantee real time
 keyframe_parallax: 10.0 # keyframe selection threshold (pixel)
 
 #imu parameters       The more accurate parameters you provide, the better performance
-acc_n: 0.1          # accelerometer measurement noise standard deviation. #0.2   0.04
-gyr_n: 0.01         # gyroscope measurement noise standard deviation.     #0.05  0.004
-acc_w: 0.001         # accelerometer bias random work noise standard deviation.  #0.002
-gyr_w: 0.0001       # gyroscope bias random work noise standard deviation.     #4.0e-5
+acc_n: 0.02622310268743605
+gyr_n: 0.060450171300378906
+acc_w: 0.000684458766347085
+gyr_w: 0.0016224083807518657
 g_norm: 9.805         # gravity magnitude
 
 #unsynchronization parameters
-estimate_td: 0                      # fixed time offset between camera and imu
-td: -0.025                           # initial value of time offset. unit: s. readed image clock + td = real image clock (IMU clock)
+estimate_td: 0
+td: 0.012404321603                  # image_time + td = IMU time
 
 #loop closure parameters
 load_previous_pose_graph: 0        # load and reuse previous pose graph; load from 'pose_graph_save_path'

@@ -1,4 +1,5 @@
 import importlib.util
+import math
 import time
 import unittest
 from pathlib import Path
@@ -14,8 +15,8 @@ MODULE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(MODULE)
 
 
-def odom(now, x=0.0, y=0.0, z=1.0, speed=0.0):
-    return {"stamp": now, "x": x, "y": y, "z": z, "speed": speed}
+def odom(now, x=0.0, y=0.0, z=1.0, speed=0.0, yaw=0.0):
+    return {"stamp": now, "x": x, "y": y, "z": z, "speed": speed, "yaw": yaw}
 
 
 def vehicle_state(now, armed=True, connected=True):
@@ -27,11 +28,11 @@ def vehicle_state(now, armed=True, connected=True):
     }
 
 
-def goal(command, stamp, x=1.0, y=0.0, z=1.0):
+def goal(command, stamp, x=1.0, y=0.0, z=1.0, yaw=0.0):
     return {
         "stamp": stamp,
         "command": command,
-        "goal": {"x": x, "y": y, "z": z},
+        "goal": {"x": x, "y": y, "z": z, "yaw": yaw},
     }
 
 
@@ -42,9 +43,10 @@ class TaskLoopTest(unittest.TestCase):
             "goal_timeout_sec": 10.0,
             "task_timeout_sec": 60.0,
             "cycle_delay_sec": 0.5,
-            "arrival_settle_sec": 1.0,
+            "arrival_settle_sec": 0.5,
             "goal_tolerance_xy": 0.25,
             "goal_tolerance_z": 0.2,
+            "goal_tolerance_yaw_deg": 10.0,
             "arrival_max_speed": 0.25,
             "odom_timeout_sec": 1.0,
             "min_start_z": 0.4,
@@ -157,6 +159,31 @@ class TaskLoopTest(unittest.TestCase):
         self.assertEqual(loop.cycle_count, 2)
         self.assertEqual(loop.state, "WAITING_GOAL")
 
+    def test_arrival_waits_for_target_yaw(self):
+        loop = self.make_loop()
+        loop.set_enabled(True, 10.0)
+        loop.start(
+            "turn toward the chair",
+            10.0,
+            odom(10.0),
+            vehicle_state=vehicle_state(10.0),
+        )
+        self.assertTrue(
+            loop.receive_goal(
+                goal("turn toward the chair", 10.1, x=0.0, yaw=math.pi / 2.0),
+                10.1,
+            )
+        )
+
+        self.assertEqual(loop.tick(10.2, odom(10.2, yaw=0.0)), [])
+        self.assertIsNone(loop.arrival_since)
+        self.assertGreater(loop.distance_yaw_deg, 80.0)
+
+        self.assertEqual(loop.tick(10.3, odom(10.3, yaw=math.pi / 2.0)), [])
+        self.assertIsNotNone(loop.arrival_since)
+        self.assertEqual(loop.tick(10.81, odom(10.81, yaw=math.pi / 2.0)), [])
+        self.assertEqual(loop.state, "WAITING_NEXT")
+
     def test_ignores_stale_or_different_goal(self):
         loop = self.make_loop()
         loop.set_enabled(True, 10.0)
@@ -180,7 +207,7 @@ class TaskLoopTest(unittest.TestCase):
             vehicle_state=vehicle_state(10.0),
         )
         loop.set_enabled(False, 10.2)
-        self.assertEqual(loop.state, "DISABLED")
+        self.assertEqual(loop.state, "ABORTED")
         self.assertFalse(loop.status()["active"])
         self.assertEqual(loop.tick(20.0, odom(20.0)), [])
 
@@ -220,7 +247,7 @@ class TaskLoopTest(unittest.TestCase):
         self.assertEqual(loop.state, "SUCCESS")
         self.assertEqual(loop.tick(20.0, odom(20.0)), [])
 
-    def test_disarm_aborts_active_node_loop_and_commands_hold(self):
+    def test_disarm_aborts_active_node_loop_without_reasserting_position_hold(self):
         node = MODULE.SpfTaskExecutorNode.__new__(MODULE.SpfTaskExecutorNode)
         node.loop = self.make_loop()
         node.loop.set_enabled(True, 10.0)
@@ -231,15 +258,16 @@ class TaskLoopTest(unittest.TestCase):
             vehicle_state=vehicle_state(10.0),
         )
         node.lock = MODULE.threading.RLock()
-        node.stop_pub = mock.Mock()
+        node.enable_pub = mock.Mock()
         node.publish_status = mock.Mock()
 
         with mock.patch.object(MODULE.time, "time", return_value=10.1):
             node.mavros_state_callback(MODULE.State(connected=True, armed=False))
 
-        self.assertEqual(node.loop.state, "DISABLED")
+        self.assertEqual(node.loop.state, "ABORTED")
         self.assertFalse(node.loop.enabled)
-        node.stop_pub.publish.assert_called_once()
+        node.enable_pub.publish.assert_called_once()
+        self.assertFalse(node.enable_pub.publish.call_args.args[0].data)
         node.publish_status.assert_called_once_with(force=True)
 
     def test_disarm_closes_idle_session_gate(self):
@@ -247,7 +275,7 @@ class TaskLoopTest(unittest.TestCase):
         node.loop = self.make_loop()
         node.loop.set_enabled(True, 10.0)
         node.lock = MODULE.threading.RLock()
-        node.stop_pub = mock.Mock()
+        node.enable_pub = mock.Mock()
         node.publish_status = mock.Mock()
 
         with mock.patch.object(MODULE.time, "time", return_value=10.1):
@@ -255,7 +283,8 @@ class TaskLoopTest(unittest.TestCase):
 
         self.assertEqual(node.loop.state, "DISABLED")
         self.assertFalse(node.loop.enabled)
-        node.stop_pub.publish.assert_called_once()
+        node.enable_pub.publish.assert_called_once()
+        self.assertFalse(node.enable_pub.publish.call_args.args[0].data)
         node.publish_status.assert_called_once_with(force=True)
 
     def test_enable_rejects_disarmed_vehicle(self):
@@ -263,7 +292,7 @@ class TaskLoopTest(unittest.TestCase):
         node.loop = self.make_loop()
         node.lock = MODULE.threading.RLock()
         node.vehicle_state = vehicle_state(10.0, armed=False)
-        node.stop_pub = mock.Mock()
+        node.enable_pub = mock.Mock()
         node.publish_status = mock.Mock()
 
         with mock.patch.object(MODULE.time, "time", return_value=10.0):
@@ -272,15 +301,16 @@ class TaskLoopTest(unittest.TestCase):
         self.assertFalse(node.loop.enabled)
         self.assertEqual(node.loop.state, "DISABLED")
         self.assertIn("armed MAVROS state", node.loop.last_rejection)
-        node.stop_pub.publish.assert_not_called()
+        node.enable_pub.publish.assert_called_once()
+        self.assertFalse(node.enable_pub.publish.call_args.args[0].data)
 
-    def test_rejected_reenable_stops_previously_enabled_session(self):
+    def test_rejected_reenable_closes_previously_enabled_session(self):
         node = MODULE.SpfTaskExecutorNode.__new__(MODULE.SpfTaskExecutorNode)
         node.loop = self.make_loop()
         node.loop.set_enabled(True, 8.0)
         node.lock = MODULE.threading.RLock()
         node.vehicle_state = vehicle_state(8.0)
-        node.stop_pub = mock.Mock()
+        node.enable_pub = mock.Mock()
         node.publish_status = mock.Mock()
 
         with mock.patch.object(MODULE.time, "time", return_value=10.0):
@@ -288,9 +318,10 @@ class TaskLoopTest(unittest.TestCase):
 
         self.assertFalse(node.loop.enabled)
         self.assertEqual(node.loop.state, "DISABLED")
-        node.stop_pub.publish.assert_called_once()
+        node.enable_pub.publish.assert_called_once()
+        self.assertFalse(node.enable_pub.publish.call_args.args[0].data)
 
-    def test_timer_closes_active_task_and_stops_when_mavros_state_is_stale(self):
+    def test_timer_closes_active_task_gate_when_mavros_state_is_stale(self):
         node = MODULE.SpfTaskExecutorNode.__new__(MODULE.SpfTaskExecutorNode)
         node.loop = self.make_loop()
         node.loop.set_enabled(True, 10.0)
@@ -303,7 +334,7 @@ class TaskLoopTest(unittest.TestCase):
         node.lock = MODULE.threading.RLock()
         node.vehicle_state = vehicle_state(8.0)
         node.odom = odom(10.0)
-        node.stop_pub = mock.Mock()
+        node.enable_pub = mock.Mock()
         node.publish_status = mock.Mock()
         node.handle_events = mock.Mock()
 
@@ -311,9 +342,62 @@ class TaskLoopTest(unittest.TestCase):
             node.timer_callback(None)
 
         self.assertFalse(node.loop.enabled)
-        self.assertEqual(node.loop.state, "DISABLED")
-        node.stop_pub.publish.assert_called_once()
+        self.assertEqual(node.loop.state, "ABORTED")
+        node.enable_pub.publish.assert_called_once()
+        self.assertFalse(node.enable_pub.publish.call_args.args[0].data)
         node.handle_events.assert_not_called()
+
+    def test_operator_completion_closes_shared_gate_and_preserves_success(self):
+        node = MODULE.SpfTaskExecutorNode.__new__(MODULE.SpfTaskExecutorNode)
+        node.loop = self.make_loop()
+        node.loop.set_enabled(True, 10.0)
+        node.loop.start(
+            "fly to the chair",
+            10.0,
+            odom(10.0),
+            vehicle_state=vehicle_state(10.0),
+        )
+        node.lock = MODULE.threading.RLock()
+        node.enable_pub = mock.Mock()
+        node.handle_events = mock.Mock()
+        node.publish_status = mock.Mock()
+
+        with mock.patch.object(MODULE.time, "time", return_value=10.1):
+            node.control_callback(MODULE.String(data="complete"))
+
+        self.assertEqual(node.loop.state, "SUCCESS")
+        node.enable_pub.publish.assert_called_once()
+        self.assertFalse(node.enable_pub.publish.call_args.args[0].data)
+
+        with mock.patch.object(MODULE.time, "time", return_value=10.2):
+            node.enable_callback(MODULE.Bool(data=False))
+        self.assertFalse(node.loop.enabled)
+        self.assertEqual(node.loop.state, "SUCCESS")
+
+    def test_goal_timeout_closes_shared_gate(self):
+        node = MODULE.SpfTaskExecutorNode.__new__(MODULE.SpfTaskExecutorNode)
+        node.loop = self.make_loop(goal_timeout_sec=1.0)
+        node.loop.set_enabled(True, 10.0)
+        node.loop.start(
+            "fly to the chair",
+            10.0,
+            odom(10.0),
+            vehicle_state=vehicle_state(10.0),
+        )
+        node.loop.receive_goal(goal("fly to the chair", 10.1), 10.1)
+        node.lock = MODULE.threading.RLock()
+        node.vehicle_state = vehicle_state(11.2)
+        node.odom = odom(11.2, x=0.0)
+        node.enable_pub = mock.Mock()
+        node.handle_events = mock.Mock()
+        node.publish_status = mock.Mock()
+
+        with mock.patch.object(MODULE.time, "time", return_value=11.2):
+            node.timer_callback(None)
+
+        self.assertEqual(node.loop.state, "TIMEOUT")
+        node.enable_pub.publish.assert_called_once()
+        self.assertFalse(node.enable_pub.publish.call_args.args[0].data)
 
 
 if __name__ == "__main__":

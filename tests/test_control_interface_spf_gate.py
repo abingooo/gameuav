@@ -1,4 +1,5 @@
 import importlib.util
+import math
 import threading
 import unittest
 from pathlib import Path
@@ -47,6 +48,13 @@ class ControlInterfaceSpfGateTest(unittest.TestCase):
         node.last_status_stamp = MODULE.rospy.Time(0)
         node.direct_position_timeout = 5.0
         node.spf_position_timeout = 0.0
+        node.spf_release_on_arrival = True
+        node.spf_arrival_tolerance_xy = 0.25
+        node.spf_arrival_tolerance_z = 0.20
+        node.spf_arrival_tolerance_yaw_deg = 10.0
+        node.spf_arrival_max_speed = 0.25
+        node.spf_arrival_settle_sec = 0.5
+        node.spf_arrival_since = None
         node.speed_timeout = 0.6
         node.ego_cmd_timeout = 0.6
         node.max_speed = 1.0
@@ -61,14 +69,30 @@ class ControlInterfaceSpfGateTest(unittest.TestCase):
         return node
 
     @staticmethod
-    def goal(x=1.0, y=0.0, z=1.0):
+    def goal(x=1.0, y=0.0, z=1.0, yaw_deg=0.0):
         msg = MODULE.PoseStamped()
         msg.header.frame_id = "world"
         msg.pose.position.x = x
         msg.pose.position.y = y
         msg.pose.position.z = z
-        msg.pose.orientation.w = 1.0
+        yaw = math.radians(yaw_deg)
+        msg.pose.orientation.z = math.sin(yaw * 0.5)
+        msg.pose.orientation.w = math.cos(yaw * 0.5)
         return msg
+
+    @staticmethod
+    def set_odom(node, x=0.0, y=0.0, z=1.0, speed=0.0, yaw_deg=0.0):
+        node.odom.pose.pose.position.x = x
+        node.odom.pose.pose.position.y = y
+        node.odom.pose.pose.position.z = z
+        yaw = math.radians(yaw_deg)
+        node.odom.pose.pose.orientation.x = 0.0
+        node.odom.pose.pose.orientation.y = 0.0
+        node.odom.pose.pose.orientation.z = math.sin(yaw * 0.5)
+        node.odom.pose.pose.orientation.w = math.cos(yaw * 0.5)
+        node.odom.twist.twist.linear.x = speed
+        node.odom.twist.twist.linear.y = 0.0
+        node.odom.twist.twist.linear.z = 0.0
 
     def enable_spf(self, node, now=10.0):
         with mock.patch.object(
@@ -114,7 +138,7 @@ class ControlInterfaceSpfGateTest(unittest.TestCase):
             node.mavros_state_cb(MODULE.State(connected=True, armed=False))
 
         self.assertFalse(node.spf_execution_enabled)
-        self.assertEqual(node.mode, "ego_passthrough")
+        self.assertEqual(node.mode, "spf_hover_wait")
         self.assertIsNone(node.direct_target)
 
         self.enable_spf(node)
@@ -133,7 +157,7 @@ class ControlInterfaceSpfGateTest(unittest.TestCase):
             node.timer_cb(None)
 
         self.assertFalse(node.spf_execution_enabled)
-        self.assertEqual(node.mode, "ego_passthrough")
+        self.assertEqual(node.mode, "spf_hover_wait")
         self.assertIsNone(node.direct_target)
         node.output_pub.publish.assert_not_called()
 
@@ -156,6 +180,165 @@ class ControlInterfaceSpfGateTest(unittest.TestCase):
             return_value=MODULE.rospy.Time(10),
         ):
             node.timer_cb(None)
+        node.output_pub.publish.assert_called_once()
+
+    def test_arrival_releases_after_half_second_and_new_spf_goal_resumes(self):
+        node = self.make_node()
+        node.spf_mavros_state_timeout_sec = 10.0
+        self.enable_spf(node)
+        with mock.patch.object(
+            MODULE.rospy.Time,
+            "now",
+            return_value=MODULE.rospy.Time.from_sec(10.0),
+        ):
+            node.spf_position_cb(self.goal(x=0.0))
+            node.timer_cb(None)
+
+        self.assertEqual(node.mode, "spf_position")
+        self.assertEqual(node.output_pub.publish.call_count, 1)
+
+        with mock.patch.object(
+            MODULE.rospy.Time,
+            "now",
+            return_value=MODULE.rospy.Time.from_sec(10.49),
+        ):
+            node.timer_cb(None)
+        self.assertEqual(node.mode, "spf_position")
+        self.assertEqual(node.output_pub.publish.call_count, 2)
+
+        with mock.patch.object(
+            MODULE.rospy.Time,
+            "now",
+            return_value=MODULE.rospy.Time.from_sec(10.51),
+        ):
+            node.timer_cb(None)
+        self.assertEqual(node.mode, "spf_hover_wait")
+        self.assertIsNone(node.direct_target)
+        self.assertTrue(node.spf_execution_enabled)
+        self.assertTrue(node.motion_rearm_required)
+        self.assertEqual(node.output_pub.publish.call_count, 2)
+
+        with mock.patch.object(
+            MODULE.rospy.Time,
+            "now",
+            return_value=MODULE.rospy.Time.from_sec(10.6),
+        ):
+            node.spf_position_cb(self.goal(x=1.0))
+            node.timer_cb(None)
+        self.assertEqual(node.mode, "spf_position")
+        self.assertEqual(node.direct_target, (1.0, 0.0, 1.0))
+        self.assertFalse(node.motion_rearm_required)
+        self.assertEqual(node.output_pub.publish.call_count, 3)
+
+    def test_arrival_requires_position_speed_yaw_and_continuous_settle(self):
+        node = self.make_node()
+        node.spf_mavros_state_timeout_sec = 10.0
+        self.enable_spf(node)
+        with mock.patch.object(
+            MODULE.rospy.Time,
+            "now",
+            return_value=MODULE.rospy.Time.from_sec(10.0),
+        ):
+            node.spf_position_cb(self.goal(x=0.0, yaw_deg=90.0))
+
+        self.set_odom(node, speed=0.30, yaw_deg=90.0)
+        with mock.patch.object(
+            MODULE.rospy.Time,
+            "now",
+            return_value=MODULE.rospy.Time.from_sec(10.1),
+        ):
+            node.timer_cb(None)
+        self.assertIsNone(node.spf_arrival_since)
+
+        self.set_odom(node, speed=0.0, yaw_deg=0.0)
+        with mock.patch.object(
+            MODULE.rospy.Time,
+            "now",
+            return_value=MODULE.rospy.Time.from_sec(10.2),
+        ):
+            node.timer_cb(None)
+        self.assertIsNone(node.spf_arrival_since)
+
+        self.set_odom(node, x=0.3, yaw_deg=90.0)
+        with mock.patch.object(
+            MODULE.rospy.Time,
+            "now",
+            return_value=MODULE.rospy.Time.from_sec(10.3),
+        ):
+            node.timer_cb(None)
+        self.assertIsNone(node.spf_arrival_since)
+
+        self.set_odom(node, yaw_deg=90.0)
+        with mock.patch.object(
+            MODULE.rospy.Time,
+            "now",
+            return_value=MODULE.rospy.Time.from_sec(10.4),
+        ):
+            node.timer_cb(None)
+        self.assertEqual(node.spf_arrival_since, MODULE.rospy.Time.from_sec(10.4))
+
+        self.set_odom(node, x=0.3, yaw_deg=90.0)
+        with mock.patch.object(
+            MODULE.rospy.Time,
+            "now",
+            return_value=MODULE.rospy.Time.from_sec(10.7),
+        ):
+            node.timer_cb(None)
+        self.assertIsNone(node.spf_arrival_since)
+
+        self.set_odom(node, yaw_deg=90.0)
+        with mock.patch.object(
+            MODULE.rospy.Time,
+            "now",
+            return_value=MODULE.rospy.Time.from_sec(10.8),
+        ):
+            node.timer_cb(None)
+        with mock.patch.object(
+            MODULE.rospy.Time,
+            "now",
+            return_value=MODULE.rospy.Time.from_sec(11.31),
+        ):
+            node.timer_cb(None)
+        self.assertEqual(node.mode, "spf_hover_wait")
+
+    def test_hover_wait_suppresses_cached_ego_but_explicit_direct_command_recovers(self):
+        node = self.make_node()
+        node.spf_mavros_state_timeout_sec = 10.0
+        self.enable_spf(node)
+        with mock.patch.object(
+            MODULE.rospy.Time,
+            "now",
+            return_value=MODULE.rospy.Time.from_sec(10.0),
+        ):
+            node.spf_position_cb(self.goal(x=0.0))
+            node.timer_cb(None)
+        with mock.patch.object(
+            MODULE.rospy.Time,
+            "now",
+            return_value=MODULE.rospy.Time.from_sec(10.51),
+        ):
+            node.timer_cb(None)
+
+        node.output_pub.reset_mock()
+        ego_cmd = MODULE.PositionCommand()
+        with mock.patch.object(
+            MODULE.rospy.Time,
+            "now",
+            return_value=MODULE.rospy.Time.from_sec(10.6),
+        ):
+            node.ego_cmd_cb(ego_cmd)
+            node.timer_cb(None)
+        node.output_pub.publish.assert_not_called()
+        self.assertEqual(node.mode, "spf_hover_wait")
+
+        with mock.patch.object(
+            MODULE.rospy.Time,
+            "now",
+            return_value=MODULE.rospy.Time.from_sec(10.7),
+        ):
+            node.position_cb(self.goal(x=0.5))
+            node.timer_cb(None)
+        self.assertEqual(node.mode, "direct_position")
         node.output_pub.publish.assert_called_once()
 
     def test_concurrent_spf_close_cannot_leave_a_target_active(self):
@@ -191,7 +374,7 @@ class ControlInterfaceSpfGateTest(unittest.TestCase):
         self.assertFalse(goal_thread.is_alive())
         self.assertFalse(close_thread.is_alive())
         self.assertFalse(node.spf_execution_enabled)
-        self.assertEqual(node.mode, "ego_passthrough")
+        self.assertEqual(node.mode, "spf_hover_wait")
         self.assertIsNone(node.direct_target)
 
     def test_concurrent_spf_close_preserves_new_direct_target(self):

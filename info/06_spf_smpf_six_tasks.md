@@ -103,6 +103,12 @@ ActionPoint(right, forward, up)
 `0.4-1.5 m`。`goal_projection_enabled=false`，所以主 SPF 链路明确绕过 EGO，
 也不使用 EGO occupancy cloud 修正目标点。
 
+控制门面用现有实验阈值判定局部点到达：XY 误差 `<=0.25 m`、Z 误差
+`<=0.20 m`、yaw 误差 `<=10 deg`、三维线速度 `<=0.25 m/s`，四项连续满足
+`0.5 s`。到达后它进入 `spf_hover_wait`，清除 SPF/EGO 缓存并完全停止
+`/control/position_cmd`；PX4Ctrl 的 `0.5 s` 命令超时随后使状态从 `CMD_CTRL`
+转为 `AUTO_HOVER`。新的 SPF 目标会重新恢复命令流和 `CMD_CTRL`。
+
 对应实现：
 
 - `launch/bringup_see_point_fly.launch:2-15`
@@ -115,15 +121,23 @@ ActionPoint(right, forward, up)
 ```text
 IDLE
   -> WAITING_GOAL：发布同一条原始指令，等待一个 SPF 位置目标
-  -> WAITING_ARRIVAL：等待局部目标的位置、速度和稳定时间条件
+  -> WAITING_ARRIVAL：等待 XY/Z/yaw/速度条件连续稳定 0.5 s
   -> WAITING_NEXT：延时后用同一条指令开始下一轮
   -> WAITING_GOAL
 ```
 
-局部目标到达只意味着“可以再看一张图并生成下一步”，不意味着任务完成。SPF 代码没有
-自动判断“已经找到正确的人”“已经完成两阶段任务”或“跟随距离正确”；必须由操作员发送
-`complete`/`success` 才进入任务级 `SUCCESS`。循环还会因单点超时、总任务超时、里程计
-失效或达到最大循环数而结束。
+TaskLoop 进入 `WAITING_NEXT` 的同时，控制层按同一组到达条件独立停止位置命令，
+使 PX4Ctrl 回到 `AUTO_HOVER`。连续 `/spf/task/start` 在轮间延时后请求下一轮，新的
+局部目标再使 PX4Ctrl 进入 `CMD_CTRL`。单次 `/spf/user_command` 和手工
+`/control/spf_position` 没有 TaskLoop 请求下一轮，因此到达后留在悬停。
+
+局部目标到达只意味着“可以再看一张图并生成下一步”，不意味着任务完成。作者 SPF
+没有任务级 `final`/`done` 输出，也不会自动判断“已经找到正确的人”“已经完成两阶段
+任务”或“跟随距离正确”；必须由操作员发送 `complete`/`success` 才进入任务级
+`SUCCESS`。循环还会因单点超时、总任务超时、里程计失效或达到最大循环数而结束。
+任一 `SUCCESS/TIMEOUT/ERROR/ABORTED` 终态都会关闭共享 `/spf/enable` 门，撤销仍在
+执行的点并阻止迟到的 VLM 响应重新接管；下一项任务必须重新 enable。到达释放和
+PX4Ctrl 状态切换是 GameUAV 真机接入逻辑，不是给作者模型新增的能力。
 
 对应实现：`ros_nodes/mission/see_point_fly_bridge/scripts/spf_task_executor.py:165-241,269-282`。
 
@@ -445,7 +459,7 @@ Follow 特意不让规划 LLM 生成 guidepoint 路线：
 
 | 层次 | SPF | SMPF |
 | --- | --- | --- |
-| 单个局部目标完成 | 到达一个直接位置点并稳定，然后启动下一次 VLM 推理 | 到达一个 EGO waypoint，并满足位置、速度、yaw、稳定时间 |
+| 单个局部目标完成 | XY `<=0.25 m`、Z `<=0.20 m`、yaw `<=10 deg`、速度 `<=0.25 m/s` 连续稳定 `0.5 s`；释放位置命令并悬停，只有连续任务才启动下一次 VLM 推理 | 到达一个 EGO waypoint，并满足位置、速度、yaw、稳定时间 |
 | 普通任务自动成功 | 不自动判断 | Navigate/Obstacle/Reasoning 的全部已验证 waypoint 执行完成 |
 | 长时域自动成功 | 不自动判断 | 所有有序阶段的 waypoint 执行完成 |
 | Search 自动成功 | 作者代码无独立本地真机完成逻辑 | 当前 RGB 检测到目标；不要求接近目标 |
