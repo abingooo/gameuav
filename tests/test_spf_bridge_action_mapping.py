@@ -35,6 +35,7 @@ class SpfBridgeActionMappingTest(unittest.TestCase):
         bridge.min_goal_distance_xy = 0.0
         bridge.min_z = -10.0
         bridge.max_z = 10.0
+        bridge.stop_pub = mock.Mock()
         return bridge
 
     def make_execution_bridge(self):
@@ -135,7 +136,7 @@ class SpfBridgeActionMappingTest(unittest.TestCase):
         bridge.last_mavros_state.armed = True
         self.assertIsNone(bridge.vehicle_state_error(10.0))
 
-    def test_disarm_transition_closes_gate_without_reasserting_position_hold(self):
+    def test_disarm_transition_closes_gate_and_stops_ego(self):
         bridge = self.make_bridge()
         bridge.enabled = True
         bridge.last_mavros_state = MODULE.State(connected=True, armed=True)
@@ -149,6 +150,7 @@ class SpfBridgeActionMappingTest(unittest.TestCase):
         bridge.publish_status.assert_called_once_with(
             "execution gate closed: MAVROS disconnected or PX4 disarmed"
         )
+        bridge.stop_pub.publish.assert_called_once()
 
     def test_explicit_gate_cannot_open_while_disarmed(self):
         bridge = self.make_bridge()
@@ -165,7 +167,7 @@ class SpfBridgeActionMappingTest(unittest.TestCase):
         self.assertFalse(bridge.enabled)
         bridge.publish_status.assert_called_once_with("enable rejected: PX4 is not armed")
 
-    def test_disabling_explicit_gate_does_not_reassert_position_hold(self):
+    def test_disabling_explicit_gate_stops_ego_once(self):
         bridge = self.make_bridge()
         bridge.enabled = True
         bridge.publish_status = mock.Mock()
@@ -174,8 +176,10 @@ class SpfBridgeActionMappingTest(unittest.TestCase):
 
         self.assertFalse(bridge.enabled)
         bridge.publish_status.assert_called_once_with("enabled=False")
+        bridge.stop_pub.publish.assert_called_once()
 
         bridge.enable_callback(MODULE.Bool(data=False))
+        bridge.stop_pub.publish.assert_called_once()
 
     def test_rejected_reenable_stops_previously_authorized_session(self):
         bridge = self.make_execution_bridge()
@@ -188,6 +192,7 @@ class SpfBridgeActionMappingTest(unittest.TestCase):
         bridge.publish_status.assert_called_once_with(
             "enable rejected: stale MAVROS state"
         )
+        bridge.stop_pub.publish.assert_called_once()
 
     def test_watchdog_closes_gate_and_stops_on_stale_mavros_state(self):
         bridge = self.make_execution_bridge()
@@ -200,6 +205,7 @@ class SpfBridgeActionMappingTest(unittest.TestCase):
         bridge.publish_status.assert_called_once_with(
             "execution gate closed: stale MAVROS state"
         )
+        bridge.stop_pub.publish.assert_called_once()
 
     def test_gate_is_rechecked_after_goal_computation_before_publish(self):
         bridge = self.make_execution_bridge()

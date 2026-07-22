@@ -86,8 +86,8 @@
       "visual_api_backend": "openai_compatible",
       "visual_api_protocol": "chat.completions",
       "image_topic_current_default": "/rgb1/image_raw",
-      "control_route": "/control/spf_position -> /control/position_cmd -> px4ctrl",
-      "trajectory_planner": null,
+      "control_route": "/control/ego_position -> EGO -> /control/ego_position_cmd -> /control/position_cmd -> px4ctrl",
+      "trajectory_planner": "EGO",
       "ego_occupancy_projection": false
     },
     "smpf_full": {

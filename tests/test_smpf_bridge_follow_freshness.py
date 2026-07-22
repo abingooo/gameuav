@@ -160,7 +160,7 @@ class SmpfBridgeFollowFreshnessTest(unittest.TestCase):
         bridge._start_cycle = mock.Mock()
         return bridge
 
-    def test_execution_cannot_be_enabled_after_task_submission(self):
+    def test_runtime_authorization_command_cannot_disable_direct_execution(self):
         bridge = self._bridge_for_gate()
         bridge.inference_busy = True
 
@@ -169,14 +169,25 @@ class SmpfBridgeFollowFreshnessTest(unittest.TestCase):
             "now",
             return_value=MODULE.rospy.Time.from_sec(10.0),
         ):
-            bridge._enable_cb(types.SimpleNamespace(data=True))
+            bridge._enable_cb(types.SimpleNamespace(data=False))
 
-        self.assertFalse(bridge.runtime_execution_enabled)
-        bridge.executor.set_enabled.assert_called_once_with(False, mock.ANY)
+        self.assertTrue(bridge.runtime_execution_enabled)
+        bridge.executor.set_enabled.assert_called_once_with(True, mock.ANY)
         bridge._publish_status.assert_called_once_with(
-            "EXECUTION_REJECTED",
-            "execution must be enabled before submitting a task",
+            "DIRECT_EXECUTION",
+            "runtime authorization commands are ignored; task execution is direct",
         )
+
+    def test_disarm_does_not_clear_default_runtime_permission(self):
+        bridge = self._bridge_for_gate()
+        bridge.runtime_execution_enabled = True
+
+        bridge._mavros_state_cb(types.SimpleNamespace(connected=True, armed=False))
+
+        self.assertTrue(bridge.runtime_execution_enabled)
+        self.assertFalse(bridge.vehicle_state.armed)
+        bridge.executor.set_enabled.assert_not_called()
+        bridge.stop_pub.publish.assert_not_called()
 
     def test_task_freezes_explicit_dry_run_intent_at_submission(self):
         bridge = self._bridge_for_gate()
@@ -190,7 +201,24 @@ class SmpfBridgeFollowFreshnessTest(unittest.TestCase):
         self.assertFalse(bridge.task["execution_requested_at_submit"])
         bridge._start_cycle.assert_called_once_with()
 
-    def test_abort_atomically_closes_execution_and_publishes_stop(self):
+    def test_direct_execute_is_rejected_instead_of_silently_becoming_dry_run(self):
+        bridge = self._bridge_for_gate()
+        bridge._execution_open = mock.Mock(return_value=False)
+        bridge._execution_preconditions = mock.Mock(return_value=(False, "VINS odometry must be fresh"))
+        message = types.SimpleNamespace(
+            data='{"instruction":"Follow the chair","mode":"follow","execute":true}'
+        )
+
+        bridge._command_cb(message)
+
+        self.assertIsNone(bridge.task)
+        bridge._start_cycle.assert_not_called()
+        bridge._publish_status.assert_called_once_with(
+            "COMMAND_REJECTED",
+            "direct execution unavailable: VINS odometry must be fresh",
+        )
+
+    def test_abort_stops_current_task_but_keeps_next_task_executable(self):
         bridge = self._bridge_for_gate()
         bridge.runtime_execution_enabled = True
         bridge.task = {"task_id": "active-task"}
@@ -203,11 +231,24 @@ class SmpfBridgeFollowFreshnessTest(unittest.TestCase):
         ):
             bridge._control_cb(types.SimpleNamespace(data="abort"))
 
-        self.assertFalse(bridge.runtime_execution_enabled)
+        self.assertTrue(bridge.runtime_execution_enabled)
         bridge.executor.abort.assert_called_once()
-        bridge.executor.set_enabled.assert_called_once_with(False, mock.ANY)
+        bridge.executor.set_enabled.assert_called_once_with(True, mock.ANY)
         bridge.stop_pub.publish.assert_called_once()
         self.assertIsNone(bridge.task)
+
+    def test_aborted_inference_discards_late_model_error(self):
+        bridge = self._bridge_for_gate()
+        bridge.inference_busy = True
+        bridge.last_error = None
+        bridge._run_cycle_impl = mock.Mock(side_effect=RuntimeError("late model timeout"))
+
+        bridge._run_cycle("aborted-task")
+
+        self.assertFalse(bridge.inference_busy)
+        self.assertIsNone(bridge.last_error)
+        bridge._log_event.assert_not_called()
+        bridge._publish_status.assert_not_called()
 
     def test_explicit_dry_run_cannot_publish_missing_target_search_motion(self):
         bridge = self._bridge_for_gate()
@@ -231,6 +272,11 @@ class SmpfBridgeFollowFreshnessTest(unittest.TestCase):
         bridge = self._bridge_for_gate()
         with self.assertRaisesRegex(ValueError, "execute must be a boolean"):
             bridge._parse_command('{"instruction":"Follow the chair","execute":1}')
+
+    def test_execute_defaults_to_true(self):
+        bridge = self._bridge_for_gate()
+        command = bridge._parse_command('{"instruction":"Follow the chair"}')
+        self.assertTrue(command["execution_requested"])
 
     @staticmethod
     def _bridge_for_publish(observation):

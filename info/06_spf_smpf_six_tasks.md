@@ -93,21 +93,23 @@ SPF 每一轮只求一个 `ActionPoint`：
 ```text
 ActionPoint(right, forward, up)
     -> 使用当前 VINS 朝向转为 world/ENU 目标并限幅
-    -> /control/spf_position
+    -> /control/ego_position
     -> gameuav_control_interface
-    -> /control/position_cmd
+    -> /planning/goal
+    -> EGO planner / traj_server
+    -> /control/ego_position_cmd -> /control/position_cmd
     -> px4ctrl
 ```
 
 当前每步水平位移最多 `1.5 m`、垂直位移最多 `0.3 m`，目标高度限制在
-`0.4-1.5 m`。`goal_projection_enabled=false`，所以主 SPF 链路明确绕过 EGO，
-也不使用 EGO occupancy cloud 修正目标点。
+`0.4-1.5 m`。`goal_projection_enabled=false` 表示 SPF bridge 自身不投影端点；
+目标仍交给 EGO，EGO 使用实时深度 occupancy 生成和更新飞行轨迹。
 
-控制门面用现有实验阈值判定局部点到达：XY 误差 `<=0.25 m`、Z 误差
+SPF TaskLoop 用现有实验阈值判定局部点到达：XY 误差 `<=0.25 m`、Z 误差
 `<=0.20 m`、yaw 误差 `<=10 deg`、三维线速度 `<=0.25 m/s`，四项连续满足
-`0.5 s`。到达后它进入 `spf_hover_wait`，清除 SPF/EGO 缓存并完全停止
-`/control/position_cmd`；PX4Ctrl 的 `0.5 s` 命令超时随后使状态从 `CMD_CTRL`
-转为 `AUTO_HOVER`。新的 SPF 目标会重新恢复命令流和 `CMD_CTRL`。
+`0.5 s`。到达后连续任务等待 `1 s` 再请求下一轮 SPF 推理；单次 EGO 轨迹
+结束后命令流自然停止，PX4Ctrl 回到 `AUTO_HOVER`。新的 SPF 目标触发下一条
+EGO 轨迹。
 
 对应实现：
 
@@ -485,7 +487,7 @@ Follow 特意不让规划 LLM 生成 guidepoint 路线：
 | 项目 | 已有证据 | 仍缺少的证据 |
 | --- | --- | --- |
 | SPF 作者源码 | 作者仓库内容和 commit 完整性已核对；本地 worker 使用作者投点器 | 五类固定真机任务的正式重复结果 |
-| SPF 真机链路 | RGB1 -> SPF -> `/control/spf_position` -> PX4Ctrl 链路已核查；有过非正式动作 | 按清单完成 Navigation/Obstacle/Long-Horizon/Reasoning/Follow 的 operator outcome |
+| SPF 真机链路 | RGB1 -> SPF -> `/control/ego_position` -> EGO -> PX4Ctrl 已完成配置和单测；旧直接链路有过非正式动作 | 统一 EGO 链路真机核查，以及按清单完成五类 operator outcome |
 | SMPF 算法组件 | 坐标、同步、分割、深度球、验证、A*、阶段身份、Follow 驻点有单测和 dry-run | 多阶段推进、移动目标跟随和 EGO 执行的完整真机验证 |
 | Search | 作者仿真提示词清单保留；SMPF 有七视角扫描代码 | 不属于本地真机比较，不能记成已复现的真机能力 |
 | 正式对比 | 固定清单、profile、记录和汇总工具已存在 | `runtime/spf_smpf_outcomes.jsonl` 尚不存在，正式进度为 0/110 |
@@ -517,8 +519,9 @@ Search 单独保留为作者仿真来源，不加入真机总表。
 
 1. **相机不同。** SPF 保留 RGB1，SMPF 使用 RealSense 彩色图和深度。这是已明确保留的
    方法差异，因此结果不是 camera-controlled comparison，不能只归因于规划方法。
-2. **下游控制不同。** SPF 直接向 PX4Ctrl 提交局部位置目标；SMPF 把目标交给 EGO。
-   因此主实验比较的是两个端到端系统，而不是纯粹隔离的“大模型规划器”。
+2. **下游控制已统一。** SPF 和 SMPF 都把世界坐标目标交给 EGO，再由同一
+   control interface 和 PX4Ctrl 执行。两者仍不是纯规划器对比，因为上游感知、
+   目标生成和相机输入不同。
 3. **模型调用结构不同。** 两者视觉决策都用 `gemini-3.5-flash`，但 SMPF 静态任务还使用
    SAM 和 `gpt-5.2`。Follow 不调用规划 LLM。必须分别记录调用次数和延迟。
 4. **平台不是原论文数值复现。** 作者 SPF 在 DJI Tello EDU 上使用定时 RC 动作；本地把
@@ -530,7 +533,7 @@ Search 单独保留为作者仿真来源，不加入真机总表。
 
 | 模式 | 视觉 VLM | SAM/RGB-D | 规划 LLM | EGO | 显式任务状态 |
 | --- | --- | --- | --- | --- | --- |
-| SPF 六类 | 每轮生成 1 个动作；调用或解析失败时本轮无动作 | 否 | 否 | 否 | 只有通用局部动作循环 |
+| SPF 六类 | 每轮生成 1 个动作；调用或解析失败时本轮无动作 | 否 | 否 | 是 | 只有通用局部动作循环 |
 | SMPF Navigate | 目标 + 障碍落地 | 是 | guidepoints | 是 | 单阶段执行 |
 | SMPF Obstacle | 目标 + 障碍落地 | 是 | guidepoints | 是 | 与 Navigate 共用 |
 | SMPF Long-Horizon | 每阶段落地 | 是 | 阶段分解 + 每阶段 guidepoints | 是 | 阶段索引 + 已完成目标 ID |

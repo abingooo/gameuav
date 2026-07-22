@@ -35,7 +35,7 @@ Primary SPF:
 - `adaptive_mode`
 - `gemini-3.5-flash`
 - EGO occupancy projection disabled
-- bounded direct position target to px4ctrl
+- bounded world-frame target routed through EGO
 
 Primary SMPF:
 
@@ -66,7 +66,7 @@ aggregate.
 6. Verify collision observation, final egocentric target visibility, and final
    target distance can be scored.
 7. Keep preview and execution separate. Disarmed SPF checks use the worker/GCS
-   preview path, which does not publish `/control/spf_position`.
+   preview path, which does not publish `/control/ego_position`.
 
 SPF receives the manifest prompt as one unchanged string. SMPF receives the same
 prompt as `instruction`, with this fixed category mapping:

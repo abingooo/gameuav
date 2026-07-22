@@ -50,6 +50,76 @@ class SmpfTaskStagesTest(unittest.TestCase):
         self.assertEqual(len(stages.stages), 1)
         payload = session.post.call_args.kwargs["json"]
         self.assertEqual(payload["reasoning_effort"], "minimal")
+        self.assertNotIn("temperature", payload)
+        self.assertEqual(client.raw_responses[0]["body"], response.json.return_value)
+
+    def test_non_gpt5_stage_payload_keeps_temperature(self):
+        response = mock.Mock(status_code=200)
+        response.json.return_value = {
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps(
+                            {
+                                "schema": "smpf.task_stages.v1",
+                                "stages": [
+                                    {
+                                        "instruction": "reach the chair",
+                                        "completion": "reach_target",
+                                    }
+                                ],
+                            }
+                        )
+                    }
+                }
+            ]
+        }
+        session = mock.Mock()
+        session.post.return_value = response
+        client = TaskStageClient(
+            api_key="test",
+            base_url="http://localhost",
+            model_id="compatible-model",
+            session=session,
+        )
+        client.decompose("reach the chair")
+        payload = session.post.call_args.kwargs["json"]
+        self.assertEqual(payload["temperature"], 0.0)
+
+    def test_kimi_k3_stage_payload_uses_provider_default_temperature(self):
+        response = mock.Mock(status_code=200)
+        response.json.return_value = {
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps(
+                            {
+                                "schema": "smpf.task_stages.v1",
+                                "stages": [
+                                    {
+                                        "instruction": "reach the chair",
+                                        "completion": "reach_target",
+                                    }
+                                ],
+                            }
+                        )
+                    }
+                }
+            ]
+        }
+        session = mock.Mock()
+        session.post.return_value = response
+        client = TaskStageClient(
+            api_key="test",
+            base_url="http://localhost",
+            model_id="kimi-k3",
+            session=session,
+        )
+
+        client.decompose("reach the chair")
+
+        payload = session.post.call_args.kwargs["json"]
+        self.assertNotIn("temperature", payload)
 
     def test_ordered_long_horizon_stages_are_parsed(self):
         result = parse_task_stages(

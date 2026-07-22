@@ -7,7 +7,8 @@
   <arg name="depth_to_color_topic" default="/camera/extrinsics/depth_to_color"/>
   <arg name="depth_to_infra1_topic" default="/camera/extrinsics/depth_to_infra1"/>
   <arg name="goal_topic" default="/control/ego_position"/>
-  <arg name="execution_enabled" default="false"/>
+  <arg name="execution_enabled" default="true"/>
+  <arg name="llm_model" default="gpt-5.2"/>
   <arg name="llm_reasoning_effort" default="$(optenv SMPF_LLM_REASONING_EFFORT low)"/>
   <arg name="follow_metric_frame_max_age_sec" default="1.0"/>
   <arg name="follow_metric_odom_skew_sec" default="0.08"/>
@@ -24,12 +25,16 @@
     <param name="goal_topic" value="$(arg goal_topic)"/>
     <param name="planning_yaw_topic" value="/planning/goal_yaw_deg"/>
     <param name="execution_enabled" value="$(arg execution_enabled)"/>
+    <param name="llm_model" value="$(arg llm_model)"/>
     <param name="llm_reasoning_effort" value="$(arg llm_reasoning_effort)"/>
     <param name="command_topic" value="/smpf/task_command"/>
     <param name="control_topic" value="/smpf/task_control"/>
     <param name="runtime_enable_topic" value="/smpf/execution_enable"/>
     <param name="status_topic" value="/smpf/status"/>
     <param name="dry_run_plan_topic" value="/smpf/dry_run_plan"/>
+    <param name="debug_image_topic" value="/smpf/debug/annotated_image"/>
+    <param name="debug_depth_topic" value="/smpf/debug/depth_image"/>
+    <param name="debug_spheres_topic" value="/smpf/debug/object_spheres"/>
     <param name="frame_timeout_sec" value="1.0"/>
     <param name="sync_slop_sec" value="0.08"/>
     <param name="sphere_safety_margin_m" value="0.30"/>
@@ -55,9 +60,10 @@
     <param name="follow_metric_frame_max_age_sec" value="$(arg follow_metric_frame_max_age_sec)"/>
     <param name="follow_metric_odom_skew_sec" value="$(arg follow_metric_odom_skew_sec)"/>
     <param name="follow_sam_timeout_sec" value="$(arg follow_sam_timeout_sec)"/>
-    <param name="require_armed_for_execution" value="true"/>
-    <param name="min_execution_z" value="0.20"/>
-    <param name="enable_max_speed" value="0.50"/>
+    <param name="require_armed_for_execution" value="false"/>
+    <param name="min_execution_z" value="0.0"/>
+    <param name="enable_max_speed" value="0.0"/>
+    <param name="arrival_settle_sec" value="0.0"/>
     <param name="goal_tolerance_yaw_deg" value="10.0"/>
     <param name="yaw_refresh_hz" value="2.0"/>
     <param name="world_min_x" value="-20.0"/>

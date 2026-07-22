@@ -4,7 +4,7 @@
   <arg name="command_topic" default="/spf/user_command"/>
   <arg name="action_topic" default="/spf/action_command"/>
   <arg name="enable_topic" default="/spf/enable"/>
-  <arg name="goal_topic" default="/control/spf_position"/>
+  <arg name="goal_topic" default="/control/ego_position"/>
   <arg name="status_topic" default="/spf/status"/>
   <arg name="worker_url" default="http://127.0.0.1:9310/infer"/>
   <arg name="goal_projection_enabled" default="false"/>
@@ -19,6 +19,7 @@
     <param name="action_topic" value="$(arg action_topic)"/>
     <param name="enable_topic" value="$(arg enable_topic)"/>
     <param name="goal_topic" value="$(arg goal_topic)"/>
+    <param name="stop_topic" value="/control/stop"/>
     <param name="status_topic" value="$(arg status_topic)"/>
     <param name="mavros_state_topic" value="/mavros/state"/>
 

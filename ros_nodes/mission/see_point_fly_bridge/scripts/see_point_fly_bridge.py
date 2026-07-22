@@ -17,7 +17,7 @@ from mavros_msgs.msg import State
 from nav_msgs.msg import Odometry
 from sensor_msgs import point_cloud2
 from sensor_msgs.msg import Image, PointCloud2
-from std_msgs.msg import Bool, String
+from std_msgs.msg import Bool, Empty, String
 
 
 class SeePointFlyBridge:
@@ -30,7 +30,8 @@ class SeePointFlyBridge:
         self.command_topic = rospy.get_param("~command_topic", "/spf/user_command")
         self.action_topic = rospy.get_param("~action_topic", "/spf/action_command")
         self.enable_topic = rospy.get_param("~enable_topic", "/spf/enable")
-        self.goal_topic = rospy.get_param("~goal_topic", "/control/spf_position")
+        self.goal_topic = rospy.get_param("~goal_topic", "/control/ego_position")
+        self.stop_topic = rospy.get_param("~stop_topic", "/control/stop")
         self.status_topic = rospy.get_param("~status_topic", "/spf/status")
         self.last_goal_topic = rospy.get_param("~last_goal_topic", "/spf/last_goal")
         self.mavros_state_topic = rospy.get_param("~mavros_state_topic", "/mavros/state")
@@ -80,6 +81,7 @@ class SeePointFlyBridge:
         self.last_projection = None
 
         self.goal_pub = rospy.Publisher(self.goal_topic, PoseStamped, queue_size=10)
+        self.stop_pub = rospy.Publisher(self.stop_topic, Empty, queue_size=1)
         self.status_pub = rospy.Publisher(self.status_topic, String, queue_size=10, latch=True)
         self.last_goal_pub = rospy.Publisher(self.last_goal_topic, String, queue_size=1, latch=True)
         rospy.Subscriber(self.image_topic, Image, self.image_callback, queue_size=1)
@@ -108,6 +110,7 @@ class SeePointFlyBridge:
         self.last_odom_time = time.time()
 
     def mavros_state_callback(self, msg):
+        should_stop = False
         with self.execution_lock:
             previous = self.last_mavros_state
             self.last_mavros_state = msg
@@ -118,14 +121,18 @@ class SeePointFlyBridge:
                 or (previous is not None and previous.connected and previous.armed)
             )
             if lost_flight_state:
+                should_stop = self.enabled
                 self.enabled = False
             if should_report:
                 self.publish_status(
                     "execution gate closed: MAVROS disconnected or PX4 disarmed"
                 )
+        if should_stop:
+            self.stop_pub.publish(Empty())
 
     def watchdog_callback(self, _event):
         now = time.time()
+        should_stop = False
         with self.execution_lock:
             if not self.enabled:
                 return
@@ -133,7 +140,10 @@ class SeePointFlyBridge:
             if not vehicle_error:
                 return
             self.enabled = False
+            should_stop = True
             self.publish_status("execution gate closed: %s" % vehicle_error)
+        if should_stop:
+            self.stop_pub.publish(Empty())
 
     def occupancy_callback(self, msg):
         points = []
@@ -151,16 +161,24 @@ class SeePointFlyBridge:
         self.last_occupancy_time = time.time()
 
     def enable_callback(self, msg):
+        should_stop = False
         with self.execution_lock:
             requested = bool(msg.data)
             if requested:
                 vehicle_error = self._vehicle_state_error_locked(time.time())
                 if vehicle_error:
+                    should_stop = self.enabled
                     self.enabled = False
                     self.publish_status("enable rejected: %s" % vehicle_error)
-                    return
-            self.enabled = requested
-            self.publish_status("enabled=%s" % self.enabled)
+                else:
+                    self.enabled = True
+                    self.publish_status("enabled=True")
+            else:
+                should_stop = self.enabled
+                self.enabled = False
+                self.publish_status("enabled=False")
+        if should_stop:
+            self.stop_pub.publish(Empty())
 
     def command_callback(self, msg):
         command = (msg.data or "").strip()

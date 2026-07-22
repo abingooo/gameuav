@@ -34,6 +34,7 @@ core.*
 /runtime/realsense_firmware/
 /runtime/vins_online_calibration/
 /runtime/vins_candidate_validation/
+/runtime/smpf_artifacts/
 
 # Local credentials and overrides
 .env

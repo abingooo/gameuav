@@ -21,6 +21,7 @@ from realsense2_camera.msg import Extrinsics
 import rospy
 from sensor_msgs.msg import CameraInfo, Image
 from std_msgs.msg import Bool, Empty, Float64, String
+from visualization_msgs.msg import Marker, MarkerArray
 
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
@@ -45,6 +46,7 @@ from strategy.smpf.runtime import (  # noqa: E402
     SamClient,
     SamClientError,
     SemanticSceneMemory,
+    SmpfArtifactWriter,
     TaskStageClient,
     TargetIdentityState,
     VisibilityGraphError,
@@ -250,6 +252,12 @@ class SmpfBridgeNode:
                 str(REPO_ROOT / "runtime" / "smpf_trials.jsonl"),
             )
         )
+        self.artifact_writer = SmpfArtifactWriter(
+            rospy.get_param(
+                "~artifact_root",
+                str(REPO_ROOT / "runtime" / "smpf_artifacts"),
+            )
+        )
         self.memory = SemanticSceneMemory(
             association_distance_m=rospy.get_param("~memory_association_distance_m", 0.35),
             ttl_sec=rospy.get_param("~memory_ttl_sec", 120.0),
@@ -313,15 +321,15 @@ class SmpfBridgeNode:
         if not math.isfinite(self.follow_sam_timeout_sec) or self.follow_sam_timeout_sec <= 0.0:
             raise ValueError("follow_sam_timeout_sec must be finite and positive")
 
-        self.allow_execution = bool(rospy.get_param("~execution_enabled", False))
-        self.require_armed = bool(rospy.get_param("~require_armed_for_execution", True))
-        self.min_execution_z = float(rospy.get_param("~min_execution_z", 0.20))
-        self.enable_max_speed = float(rospy.get_param("~enable_max_speed", 0.50))
-        self.runtime_execution_enabled = False
+        self.allow_execution = bool(rospy.get_param("~execution_enabled", True))
+        self.require_armed = bool(rospy.get_param("~require_armed_for_execution", False))
+        self.min_execution_z = float(rospy.get_param("~min_execution_z", 0.0))
+        self.enable_max_speed = float(rospy.get_param("~enable_max_speed", 0.0))
+        self.runtime_execution_enabled = self.allow_execution
         self.executor = WaypointExecutionLoop(
             goal_timeout_sec=rospy.get_param("~goal_timeout_sec", 45.0),
             task_timeout_sec=rospy.get_param("~task_timeout_sec", 300.0),
-            arrival_settle_sec=rospy.get_param("~arrival_settle_sec", 1.0),
+            arrival_settle_sec=rospy.get_param("~arrival_settle_sec", 0.0),
             goal_tolerance_xy=rospy.get_param("~goal_tolerance_xy", 0.25),
             goal_tolerance_z=rospy.get_param("~goal_tolerance_z", 0.20),
             arrival_max_speed=rospy.get_param("~arrival_max_speed", 0.25),
@@ -330,7 +338,7 @@ class SmpfBridgeNode:
             ),
             odom_timeout_sec=rospy.get_param("~odom_timeout_sec", 1.0),
         )
-        self.executor.set_enabled(False, time.time())
+        self.executor.set_enabled(self.runtime_execution_enabled, time.time())
 
         self.frame_timeout_sec = float(rospy.get_param("~frame_timeout_sec", 1.0))
         self.sphere_margin_m = float(rospy.get_param("~sphere_safety_margin_m", 0.30))
@@ -384,6 +392,33 @@ class SmpfBridgeNode:
             rospy.get_param("~dry_run_plan_topic", "/smpf/dry_run_plan"),
             String,
             queue_size=10,
+            latch=True,
+        )
+        self.debug_image_topic = rospy.get_param(
+            "~debug_image_topic", "/smpf/debug/annotated_image"
+        )
+        self.debug_image_pub = rospy.Publisher(
+            self.debug_image_topic,
+            Image,
+            queue_size=2,
+            latch=True,
+        )
+        self.debug_depth_topic = rospy.get_param(
+            "~debug_depth_topic", "/smpf/debug/depth_image"
+        )
+        self.debug_depth_pub = rospy.Publisher(
+            self.debug_depth_topic,
+            Image,
+            queue_size=2,
+            latch=True,
+        )
+        self.debug_spheres_topic = rospy.get_param(
+            "~debug_spheres_topic", "/smpf/debug/object_spheres"
+        )
+        self.debug_spheres_pub = rospy.Publisher(
+            self.debug_spheres_topic,
+            MarkerArray,
+            queue_size=2,
             latch=True,
         )
 
@@ -503,16 +538,8 @@ class SmpfBridgeNode:
             }
 
     def _mavros_state_cb(self, msg):
-        should_close = False
         with self.lock:
             self.vehicle_state = msg
-            if self.runtime_execution_enabled and self.require_armed and not msg.armed:
-                self.runtime_execution_enabled = False
-                self.executor.set_enabled(False, rospy.Time.now().to_sec())
-                should_close = True
-        if should_close:
-            self.stop_pub.publish(Empty())
-            self._publish_status("EXECUTION_GATE", "closed because PX4 disarmed")
 
     def _vins_extrinsic_cb(self, msg):
         self._accept_extrinsic(
@@ -553,40 +580,13 @@ class SmpfBridgeNode:
             self.calibration_errors.pop(attribute, None)
 
     def _enable_cb(self, msg):
-        requested = bool(msg.data)
-        ready, precondition_reason = self._execution_preconditions(check_speed=True)
         with self.lock:
-            opening_during_task = (
-                requested
-                and not self.runtime_execution_enabled
-                and (
-                    self.inference_busy
-                    or self.task is not None
-                    or self.executor.state == "WAITING_ARRIVAL"
-                )
-            )
-            effective = (
-                self.allow_execution
-                and requested
-                and ready
-                and not opening_during_task
-            )
-            was_active = self.executor.state == "WAITING_ARRIVAL"
-            self.runtime_execution_enabled = effective
-            self.executor.set_enabled(effective, rospy.Time.now().to_sec())
-        if was_active and not effective:
-            self.stop_pub.publish(Empty())
-        if requested and opening_during_task:
-            self._publish_status(
-                "EXECUTION_REJECTED",
-                "execution must be enabled before submitting a task",
-            )
-        elif requested and not self.allow_execution:
-            self._publish_status("EXECUTION_REJECTED", "launch-time execution_enabled is false")
-        elif requested and not ready:
-            self._publish_status("EXECUTION_REJECTED", precondition_reason)
-        else:
-            self._publish_status("EXECUTION_GATE", "open" if effective else "closed")
+            self.runtime_execution_enabled = self.allow_execution
+            self.executor.set_enabled(self.allow_execution, rospy.Time.now().to_sec())
+        self._publish_status(
+            "DIRECT_EXECUTION",
+            "runtime authorization commands are ignored; task execution is direct",
+        )
 
     def _command_cb(self, msg):
         try:
@@ -602,11 +602,15 @@ class SmpfBridgeNode:
             ):
                 self._publish_status("COMMAND_REJECTED", "another task cycle is active")
                 return
-            gate_open = self._execution_open()
             requested = command.get("execution_requested")
-            command["execution_requested_at_submit"] = (
-                gate_open if requested is None else requested and gate_open
-            )
+            if requested and not self._execution_open():
+                _ready, reason = self._execution_preconditions(check_speed=False)
+                self._publish_status(
+                    "COMMAND_REJECTED",
+                    "direct execution unavailable: %s" % reason,
+                )
+                return
+            command["execution_requested_at_submit"] = bool(requested)
             self.last_error = None
             self.task = command
             self.pending_replan_at = None
@@ -629,15 +633,19 @@ class SmpfBridgeNode:
         if command in {"abort", "stop"}:
             with self.lock:
                 task_id = self.task["task_id"] if self.task else None
+                request_in_flight = self.inference_busy
                 self.executor.abort("operator aborted SMPF task", now)
-                self.runtime_execution_enabled = False
-                self.executor.set_enabled(False, now)
+                self.runtime_execution_enabled = self.allow_execution
+                self.executor.set_enabled(self.allow_execution, now)
                 self.task = None
                 self.pending_replan_at = None
                 self.search_target = None
             self.stop_pub.publish(Empty())
             self._log_event("terminal", task_id, state="ABORTED", reason="operator aborted SMPF task")
-            self._publish_status("ABORTED", "operator aborted SMPF task")
+            reason = "operator aborted SMPF task"
+            if request_in_flight:
+                reason += "; in-flight model response will be discarded"
+            self._publish_status("ABORTED", reason)
         elif command in {"complete", "success"}:
             with self.lock:
                 self.task = None
@@ -667,14 +675,14 @@ class SmpfBridgeNode:
             instruction = str(payload.get("instruction") or "").strip()
             mode = str(payload.get("mode") or "navigate").strip().lower()
             max_cycles = int(payload.get("max_cycles", 10))
-            execution_requested = payload.get("execute")
-            if execution_requested is not None and not isinstance(execution_requested, bool):
+            execution_requested = payload.get("execute", True)
+            if not isinstance(execution_requested, bool):
                 raise ValueError("execute must be a boolean when provided")
         else:
             instruction = raw
             mode = "navigate"
             max_cycles = 10
-            execution_requested = None
+            execution_requested = True
         mode = MODE_ALIASES.get(mode, mode)
         if not instruction:
             raise ValueError("task instruction cannot be empty")
@@ -717,9 +725,12 @@ class SmpfBridgeNode:
         except Exception as exc:
             failed_follow = False
             failed_metric_observation = None
+            cancelled = False
             with self.lock:
-                self.last_error = str(exc)
-                if self.task is not None and self.task["task_id"] == task_id:
+                if self.task is None or self.task["task_id"] != task_id:
+                    cancelled = True
+                else:
+                    self.last_error = str(exc)
                     failed_follow = self.task["mode"] == "follow"
                     if failed_follow:
                         failed_metric_observation = self.task.get("follow_metric_observation")
@@ -727,6 +738,8 @@ class SmpfBridgeNode:
                         self.pending_replan_at = None
                         self.search_target = None
                     self.task = None
+            if cancelled:
+                return
             if failed_follow:
                 self.stop_pub.publish(Empty())
             self._log_event(
@@ -823,7 +836,10 @@ class SmpfBridgeNode:
                         reasoning_effort=self.llm_reasoning_effort,
                     )
                 stage_started = time.monotonic()
-                decomposition = self.stage_client.decompose(task["instruction"])
+                try:
+                    decomposition = self.stage_client.decompose(task["instruction"])
+                finally:
+                    self._archive_model_responses(task_id, "stage_llm", self.stage_client)
                 stage_decomposition_latency = time.monotonic() - stage_started
                 stage_model_calls = 1
                 if len(decomposition.stages) < 2:
@@ -869,15 +885,49 @@ class SmpfBridgeNode:
             rospy.Time.now().to_sec() - grounding_stamp,
         )
         detection_started = time.monotonic()
-        if task["mode"] == "follow":
-            detection = self.detector.detect(color, stage_instruction)
-            scene_obstacles = ()
-        else:
-            scene = self.detector.detect_scene(color, stage_instruction)
-            detection = scene.target
-            scene_obstacles = scene.obstacles
+        try:
+            if task["mode"] == "follow":
+                detection = self.detector.detect(color, stage_instruction)
+                scene_obstacles = ()
+            else:
+                scene = self.detector.detect_scene(color, stage_instruction)
+                detection = scene.target
+                scene_obstacles = scene.obstacles
+        finally:
+            self._archive_model_responses(task_id, "vlm", self.detector)
         detection_latency = time.monotonic() - detection_started
         detection_attempts = self.detector.last_attempts
+        vlm_annotations = []
+        if detection is not None:
+            vlm_annotations.append(
+                {
+                    "label": "VLM target: %s" % detection.label,
+                    "bbox_yxyx": detection.pixel_bbox(color.shape),
+                    "color_bgr": (40, 220, 40),
+                }
+            )
+        for item in scene_obstacles:
+            vlm_annotations.append(
+                {
+                    "label": "VLM obstacle: %s" % item.label,
+                    "bbox_yxyx": item.pixel_bbox(color.shape),
+                    "color_bgr": (0, 180, 255),
+                }
+            )
+        self._publish_debug_image(
+            task_id,
+            "vlm_grounding",
+            color,
+            vlm_annotations,
+            grounding_stamp,
+        )
+        self._publish_debug_depth(
+            task_id,
+            "vlm_grounding",
+            depth,
+            vlm_annotations,
+            grounding_stamp,
+        )
         if detection is None:
             if task["mode"] == "follow" and task["follow_final_observation"]:
                 with self.lock:
@@ -922,6 +972,7 @@ class SmpfBridgeNode:
         body_models = []
         sam_latency = 0.0
         sam_bbox_fallbacks = []
+        sam_annotations = []
         metric_observation = None
         if task["mode"] == "follow":
             frame, odom, transforms = self._snapshot_inputs()
@@ -994,6 +1045,28 @@ class SmpfBridgeNode:
             metric_observation["sam_selected_mask_area_px"] = mask.area_px
             sam_points = [mask.centroid_uv]
             sam_points.extend(mask.sample_points_uv)
+            sam_annotations.append(
+                {
+                    "label": "SAM target: %s" % detection.label,
+                    "bbox_yxyx": mask.bbox_yxyx,
+                    "centroid_uv": mask.centroid_uv,
+                    "color_bgr": (255, 80, 220),
+                }
+            )
+            self._publish_debug_image(
+                task_id,
+                "sam_metric",
+                color,
+                sam_annotations,
+                stamp,
+            )
+            self._publish_debug_depth(
+                task_id,
+                "sam_metric",
+                depth,
+                sam_annotations,
+                stamp,
+            )
             sphere, estimate = sphere_from_aligned_bbox(
                 detection.label,
                 mask.bbox_yxyx,
@@ -1052,15 +1125,26 @@ class SmpfBridgeNode:
                 if mask is None:
                     sam_bbox = detected_bbox
                     sam_points = None
+                    sam_centroid = None
                     geometry_source = "vlm_bbox_aligned_rgbd_fallback"
                     sam_bbox_fallbacks.append({"label": item.label, "reason": fallback_reason})
                 else:
                     sam_bbox = self._offset_bbox(mask.bbox_yxyx, offset)
-                    sam_points = [self._offset_point(mask.centroid_uv, offset)]
+                    sam_centroid = self._offset_point(mask.centroid_uv, offset)
+                    sam_points = [sam_centroid]
                     sam_points.extend(
                         self._offset_point(point, offset) for point in mask.sample_points_uv
                     )
                     geometry_source = "vlm_sam_aligned_rgbd"
+                sam_annotations.append(
+                    {
+                        "label": "%s %s: %s"
+                        % ("SAM" if mask is not None else "VLM fallback", "target" if index == 0 else "obstacle", item.label),
+                        "bbox_yxyx": sam_bbox,
+                        "centroid_uv": sam_centroid,
+                        "color_bgr": (255, 80, 220) if index == 0 else (255, 180, 40),
+                    }
+                )
                 sphere, estimate = sphere_from_aligned_bbox(
                     item.label,
                     sam_bbox,
@@ -1074,6 +1158,20 @@ class SmpfBridgeNode:
                     source=geometry_source,
                 )
                 body_models.append((sphere, estimate))
+            self._publish_debug_image(
+                task_id,
+                "vlm_sam_geometry",
+                color,
+                vlm_annotations + sam_annotations,
+                stamp,
+            )
+            self._publish_debug_depth(
+                task_id,
+                "vlm_sam_geometry",
+                depth,
+                vlm_annotations + sam_annotations,
+                stamp,
+            )
 
         sphere_body, depth_estimate = body_models[0]
 
@@ -1152,6 +1250,13 @@ class SmpfBridgeNode:
             source=target_entry.source,
         )
         target_memory_world = target_entry.as_sphere()
+        self._archive_sphere_models(
+            task_id,
+            stamp,
+            observed_entries,
+            body_models,
+            world_models,
+        )
         try:
             corridor_goal = approach_goal_for_sphere(
                 target_memory_body,
@@ -1327,11 +1432,14 @@ class SmpfBridgeNode:
                 require_target_visibility=self.require_target_visibility,
             )
             planner_started = time.monotonic()
-            plan = self.planner.plan(
-                request,
-                max_attempts=2,
-                enable_deterministic_fallback=self.deterministic_fallback_enabled,
-            )
+            try:
+                plan = self.planner.plan(
+                    request,
+                    max_attempts=2,
+                    enable_deterministic_fallback=self.deterministic_fallback_enabled,
+                )
+            finally:
+                self._archive_model_responses(task_id, "planning_llm", self.planner)
             planner_latency = time.monotonic() - planner_started
         world_points_array = transform_points(world_from_body, plan.guidepoints_m)
         world_points = tuple(tuple(float(value) for value in point) for point in world_points_array)
@@ -1441,6 +1549,12 @@ class SmpfBridgeNode:
                 else "verified_guidepoint_path"
             ),
             "trajectory_owner": "ego",
+            "artifacts": {
+                "task_dir": str(self.artifact_writer.task_directory(task_id)),
+                "annotated_image_topic": self.debug_image_topic,
+                "depth_image_topic": self.debug_depth_topic,
+                "object_spheres_topic": self.debug_spheres_topic,
+            },
             "guidepoints_m": () if task["mode"] == "follow" else world_points,
             "tracking_goal_world_m": (
                 world_points[-1] if task["mode"] == "follow" else None
@@ -2072,7 +2186,7 @@ class SmpfBridgeNode:
 
     def _execution_open(self):
         ready, _reason = self._execution_preconditions(check_speed=False)
-        return self.allow_execution and self.runtime_execution_enabled and self.executor.enabled and ready
+        return self.allow_execution and self.executor.enabled and ready
 
     def _execution_preconditions(self, check_speed):
         now = rospy.Time.now().to_sec()
@@ -2083,17 +2197,154 @@ class SmpfBridgeNode:
                 return False, "PX4 must be connected and armed"
             if odom is None or now - odom["stamp"] > self.executor.odom_timeout_sec:
                 return False, "VINS odometry must be fresh"
-            if odom["z"] < self.min_execution_z:
+            if self.min_execution_z > 0.0 and odom["z"] < self.min_execution_z:
                 return False, "VINS start altitude is below min_execution_z"
-            if check_speed and odom["speed"] > self.enable_max_speed:
+            if (
+                check_speed
+                and self.enable_max_speed > 0.0
+                and odom["speed"] > self.enable_max_speed
+            ):
                 return False, "vehicle speed is above enable_max_speed"
         return True, "ready"
 
     def _log_event(self, event, task_id, **fields):
         try:
-            self.experiment_logger.log(event, task_id, **fields)
+            record = self.experiment_logger.log(event, task_id, **fields)
         except Exception as exc:
             rospy.logwarn_throttle(5.0, "SMPF experiment log failed: %s", exc)
+            return
+        try:
+            self.artifact_writer.record_event(record)
+        except Exception as exc:
+            rospy.logwarn_throttle(5.0, "SMPF trial summary failed: %s", exc)
+
+    def _archive_model_responses(self, task_id, kind, client):
+        responses = tuple(getattr(client, "raw_responses", ()))
+        for response in responses:
+            try:
+                self.artifact_writer.write_response(task_id, kind, response)
+            except Exception as exc:
+                rospy.logwarn_throttle(5.0, "SMPF model response archive failed: %s", exc)
+
+    def _publish_debug_image(self, task_id, phase, image, annotations, stamp):
+        try:
+            annotated, _path = self.artifact_writer.write_annotated_image(
+                task_id,
+                phase,
+                image,
+                annotations,
+            )
+            message = self.bridge.cv2_to_imgmsg(annotated, encoding="bgr8")
+            message.header.stamp = rospy.Time.from_sec(float(stamp))
+            message.header.frame_id = "camera_color_optical_frame"
+            self.debug_image_pub.publish(message)
+        except Exception as exc:
+            rospy.logwarn_throttle(5.0, "SMPF annotated image archive failed: %s", exc)
+
+    def _publish_debug_depth(self, task_id, phase, depth, annotations, stamp):
+        try:
+            annotated, _image_path, _raw_path = self.artifact_writer.write_depth_image(
+                task_id,
+                phase,
+                depth,
+                annotations,
+            )
+            message = self.bridge.cv2_to_imgmsg(annotated, encoding="bgr8")
+            message.header.stamp = rospy.Time.from_sec(float(stamp))
+            message.header.frame_id = "camera_color_optical_frame"
+            self.debug_depth_pub.publish(message)
+        except Exception as exc:
+            rospy.logwarn_throttle(5.0, "SMPF depth image archive failed: %s", exc)
+
+    def _archive_sphere_models(
+        self,
+        task_id,
+        stamp,
+        observed_entries,
+        body_models,
+        world_models,
+    ):
+        objects = []
+        for index, (entry, body_model, world_model) in enumerate(
+            zip(observed_entries, body_models, world_models)
+        ):
+            body_sphere, estimate = body_model
+            world_sphere, _world_estimate = world_model
+            objects.append(
+                {
+                    "role": "target" if index == 0 else "obstacle",
+                    "object_id": entry.object_id,
+                    "label": body_sphere.label,
+                    "confidence": body_sphere.confidence,
+                    "source": body_sphere.source,
+                    "safety_radius_m": body_sphere.radius,
+                    "body_flu": {"center_m": body_sphere.center},
+                    "world": {"center_m": world_sphere.center},
+                    "depth": {
+                        "value_m": estimate.value_m,
+                        "std_m": estimate.std_m,
+                        "sample_count": estimate.sample_count,
+                        "minimum_m": estimate.minimum_m,
+                        "maximum_m": estimate.maximum_m,
+                    },
+                }
+            )
+        payload = {
+            "schema": "gameuav.smpf.sphere_models.v1",
+            "task_id": task_id,
+            "frame_stamp": stamp,
+            "sphere_safety_margin_m": self.sphere_margin_m,
+            "objects": objects,
+        }
+        try:
+            self.artifact_writer.write_geometry(task_id, "sphere_models", payload)
+        except Exception as exc:
+            rospy.logwarn_throttle(5.0, "SMPF sphere model archive failed: %s", exc)
+        self._publish_sphere_markers(stamp, world_models)
+
+    def _publish_sphere_markers(self, stamp, world_models):
+        marker_array = MarkerArray()
+        clear = Marker()
+        clear.action = Marker.DELETEALL
+        marker_array.markers.append(clear)
+        for index, (sphere, _estimate) in enumerate(world_models):
+            color = (0.2, 0.9, 0.2) if index == 0 else (1.0, 0.55, 0.1)
+            marker = Marker()
+            marker.header.stamp = rospy.Time.from_sec(float(stamp))
+            marker.header.frame_id = "world"
+            marker.ns = "smpf_object_spheres"
+            marker.id = index * 2
+            marker.type = Marker.SPHERE
+            marker.action = Marker.ADD
+            marker.pose.position.x = sphere.center[0]
+            marker.pose.position.y = sphere.center[1]
+            marker.pose.position.z = sphere.center[2]
+            marker.pose.orientation.w = 1.0
+            marker.scale.x = sphere.radius * 2.0
+            marker.scale.y = sphere.radius * 2.0
+            marker.scale.z = sphere.radius * 2.0
+            marker.color.r, marker.color.g, marker.color.b = color
+            marker.color.a = 0.28
+            marker_array.markers.append(marker)
+
+            label = Marker()
+            label.header = marker.header
+            label.ns = "smpf_object_sphere_labels"
+            label.id = index * 2 + 1
+            label.type = Marker.TEXT_VIEW_FACING
+            label.action = Marker.ADD
+            label.pose.position.x = sphere.center[0]
+            label.pose.position.y = sphere.center[1]
+            label.pose.position.z = sphere.center[2] + sphere.radius + 0.12
+            label.pose.orientation.w = 1.0
+            label.scale.z = 0.16
+            label.color.r = 1.0
+            label.color.g = 1.0
+            label.color.b = 1.0
+            label.color.a = 1.0
+            label.text = "%s r=%.2fm" % (sphere.label, sphere.radius)
+            marker_array.markers.append(label)
+        self.debug_spheres_pub.publish(marker_array)
 
     def _status_timer_cb(self, _event):
         self._publish_status("ALIVE", "periodic health")
@@ -2148,6 +2399,12 @@ class SmpfBridgeNode:
                 "memory_object_count": len(self.memory.snapshot(now)),
                 "last_error": self.last_error,
                 "sam_endpoint": self.sam.endpoint,
+                "artifact_root": str(self.artifact_writer.root),
+                "debug_topics": {
+                    "annotated_image": self.debug_image_topic,
+                    "depth_image": self.debug_depth_topic,
+                    "object_spheres": self.debug_spheres_topic,
+                },
                 "model_config_source": self.model_config_source,
                 "models": {"vlm": self.vlm_model_id, "llm": self.llm_model_id},
                 "llm_reasoning_effort": self.llm_reasoning_effort,

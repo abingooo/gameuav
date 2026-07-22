@@ -8,7 +8,12 @@ from typing import Tuple
 
 import requests
 
-from .model_defaults import DEFAULT_LLM_MODEL, resolve_llm_reasoning_effort
+from .model_defaults import (
+    DEFAULT_LLM_MODEL,
+    llm_sampling_parameters,
+    resolve_llm_reasoning_effort,
+)
+from .model_trace import model_response_snapshot
 
 
 TASK_STAGES_SCHEMA = "smpf.task_stages.v1"
@@ -116,6 +121,7 @@ class TaskStageClient:
         self.model_id = str(model_id or os.environ.get("SMPF_LLM_MODEL", DEFAULT_LLM_MODEL)).strip()
         self.reasoning_effort = resolve_llm_reasoning_effort(reasoning_effort)
         self.timeout_sec = float(timeout_sec)
+        self.raw_responses = []
         if not self.api_key:
             raise ValueError("SMPF_LLM_API_KEY is required")
         if not self.base_url:
@@ -127,6 +133,7 @@ class TaskStageClient:
         self._session = session or requests.Session()
 
     def decompose(self, instruction):
+        self.raw_responses = []
         payload = {
             "model": self.model_id,
             "messages": [
@@ -136,10 +143,10 @@ class TaskStageClient:
                 },
                 {"role": "user", "content": task_stage_prompt(instruction)},
             ],
-            "temperature": 0.0,
             "response_format": {"type": "json_object"},
             "reasoning_effort": self.reasoning_effort,
         }
+        payload.update(llm_sampling_parameters(self.model_id, 0.0))
         try:
             response = self._session.post(
                 self.base_url,
@@ -154,6 +161,7 @@ class TaskStageClient:
             raise TaskStageTransportError("task stage request failed: %s" % exc) from exc
         except Exception as exc:
             raise TaskStageTransportError("task stage request failed: %s" % exc) from exc
+        self.raw_responses.append(model_response_snapshot(response))
         if int(response.status_code) != 200:
             detail = str(getattr(response, "text", ""))[:300]
             raise TaskStageTransportError(

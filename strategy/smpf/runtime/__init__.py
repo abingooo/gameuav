@@ -42,7 +42,8 @@ from .execution import (
     TERMINAL_EXECUTION_STATES,
     WaypointExecutionLoop,
 )
-from .experiment_log import JsonlExperimentLogger
+from .artifacts import SmpfArtifactWriter, colorize_depth_image
+from .experiment_log import JsonlExperimentLogger, redact_sensitive
 from .model_defaults import (
     DEFAULT_LLM_MODEL,
     DEFAULT_LLM_REASONING_EFFORT,
@@ -122,6 +123,8 @@ __all__ = [
     "DEFAULT_LLM_REASONING_EFFORT",
     "DEFAULT_VLM_MODEL",
     "JsonlExperimentLogger",
+    "SmpfArtifactWriter",
+    "colorize_depth_image",
     "ModelPlannerClient",
     "ModelPlannerError",
     "ModelTransportError",
@@ -178,6 +181,7 @@ __all__ = [
     "scene_detection_prompt",
     "select_follow_goal",
     "resolve_llm_reasoning_effort",
+    "redact_sensitive",
     "sphere_from_aligned_bbox",
     "transform_points",
     "validate_extrinsic_transform",

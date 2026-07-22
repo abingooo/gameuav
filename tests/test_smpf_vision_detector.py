@@ -125,6 +125,30 @@ class SmpfVisionDetectorTest(unittest.TestCase):
             client.detect_scene([[[0, 0, 0]]], "fly to chair")
         self.assertEqual(client.last_attempts, 2)
 
+    def test_complete_retains_full_provider_response(self):
+        provider_body = {
+            "id": "vlm-response",
+            "choices": [
+                {
+                    "message": {
+                        "content": '{"schema":"smpf.detection.v1","label":"","bbox_yxyx_1000":[],"confidence":0.0}'
+                    }
+                }
+            ],
+            "usage": {"total_tokens": 42},
+        }
+        response = mock.Mock(status_code=200)
+        response.json.return_value = provider_body
+        session = mock.Mock()
+        session.post.return_value = response
+        client = VisionDetectorClient(
+            api_key="test",
+            base_url="http://localhost",
+            session=session,
+        )
+        client.detect([[[0, 0, 0]]], "find nothing")
+        self.assertEqual(client.raw_responses[0]["body"], provider_body)
+
 
 if __name__ == "__main__":
     unittest.main()

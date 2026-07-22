@@ -110,6 +110,16 @@ Navigation, Obstacle Avoidance, and Reasoning do not inherit Follow's `1.0 s`
 completion gate. Long Horizon snapshots a newer image after initial stage
 decomposition before invoking the VLM.
 
+Each task writes inspectable artifacts under
+`runtime/smpf_artifacts/<task_id>/`: annotated VLM/SAM geometry images, raw
+aligned-depth arrays with annotated color visualizations, body/world sphere
+models, complete provider response bodies for VLM and LLM calls, and an
+automatically updated `summary.json`. The latest RGB annotation, depth
+visualization, and world-frame sphere markers are published on
+`/smpf/debug/annotated_image`, `/smpf/debug/depth_image`, and
+`/smpf/debug/object_spheres`. Provider credentials and authorization headers
+are never stored.
+
 Visible obstacle candidates are retained in world-frame memory, while a
 continuous 3-D corridor test selects the subset relevant to the current target
 approach. This keeps unrelated objects out of language and graph planning
@@ -120,16 +130,11 @@ than continuously optimizing them. The bridge independently rejects non-rigid
 or physically implausible sensor extrinsics before any model call can create a
 flight plan.
 
-The bridge starts with `execution_enabled=false`. A true message on
-`/smpf/execution_enable` cannot override that launch-time gate. Even when the
-launch gate is explicitly enabled, runtime execution also requires connected
-and armed PX4 state, fresh VINS odometry, minimum start altitude, and a bounded
-enable-time speed. Disarming closes execution immediately. Dry-run tasks publish
-verified plans on `/smpf/dry_run_plan` and status on `/smpf/status`.
-The shared control interface independently requires fresh PX4 and VINS
-attitudes with roll/pitch disagreement no greater than `15 deg`. A violation
-clears cached motion and requires a new command after recovery, so neither SMPF
-nor SPF can continue an old route after estimator drift.
+The bridge starts with execution permission enabled. Runtime execution requires
+fresh VINS odometry, but does not require PX4 armed state, minimum start
+altitude, an enable-time speed threshold, or the control-interface attitude
+guard. Dry-run tasks remain available by explicitly submitting `execute=false`;
+they publish verified plans on `/smpf/dry_run_plan` and status on `/smpf/status`.
 
 ```bash
 rostopic pub -1 /smpf/task_command std_msgs/String \

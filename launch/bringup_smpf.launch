@@ -1,6 +1,7 @@
 <launch>
-  <arg name="execution_enabled" default="false"/>
+  <arg name="execution_enabled" default="true"/>
   <arg name="goal_topic" default="/control/ego_position"/>
+  <arg name="llm_model" default="gpt-5.2"/>
   <arg name="llm_reasoning_effort" default="$(optenv SMPF_LLM_REASONING_EFFORT low)"/>
   <arg name="follow_metric_frame_max_age_sec" default="1.0"/>
   <arg name="follow_metric_odom_skew_sec" default="0.08"/>
@@ -9,6 +10,7 @@
   <include file="$(find smpf_bridge)/launch/smpf_bridge.launch">
     <arg name="execution_enabled" value="$(arg execution_enabled)"/>
     <arg name="goal_topic" value="$(arg goal_topic)"/>
+    <arg name="llm_model" value="$(arg llm_model)"/>
     <arg name="llm_reasoning_effort" value="$(arg llm_reasoning_effort)"/>
     <arg name="follow_metric_frame_max_age_sec" value="$(arg follow_metric_frame_max_age_sec)"/>
     <arg name="follow_metric_odom_skew_sec" value="$(arg follow_metric_odom_skew_sec)"/>

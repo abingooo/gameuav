@@ -11,7 +11,12 @@ import requests
 from .contracts import ObjectSphere, ValidationResult
 from .deterministic_planner import VisibilityGraphError, plan_visibility_graph
 from .goal_validation import validate_goal_conditioned_polyline
-from .model_defaults import DEFAULT_LLM_MODEL, resolve_llm_reasoning_effort
+from .model_defaults import (
+    DEFAULT_LLM_MODEL,
+    llm_sampling_parameters,
+    resolve_llm_reasoning_effort,
+)
+from .model_trace import model_response_snapshot
 
 
 PLAN_SCHEMA = "smpf.guidepoint_plan.v1"
@@ -311,6 +316,7 @@ class ModelPlannerClient:
         self.reasoning_effort = resolve_llm_reasoning_effort(reasoning_effort)
         self.timeout_sec = float(timeout_sec)
         self.temperature = float(temperature)
+        self.raw_responses = []
         if not self.api_key:
             raise ValueError("SMPF_LLM_API_KEY is required")
         if not self.base_url:
@@ -330,6 +336,7 @@ class ModelPlannerClient:
         feedback = None
         last_error = None
         last_invalid_points = ()
+        self.raw_responses = []
         for attempt in range(1, max_attempts + 1):
             content = self._complete(build_planning_prompt(request, feedback))
             try:
@@ -410,10 +417,10 @@ class ModelPlannerClient:
                 },
                 {"role": "user", "content": prompt},
             ],
-            "temperature": self.temperature,
             "response_format": {"type": "json_object"},
             "reasoning_effort": self.reasoning_effort,
         }
+        payload.update(llm_sampling_parameters(self.model_id, self.temperature))
         headers = {
             "Authorization": "Bearer %s" % self.api_key,
             "Content-Type": "application/json",
@@ -429,6 +436,7 @@ class ModelPlannerClient:
             raise ModelTransportError("model request failed: %s" % exc) from exc
         except Exception as exc:
             raise ModelTransportError("model request failed: %s" % exc) from exc
+        self.raw_responses.append(model_response_snapshot(response))
         if int(response.status_code) != 200:
             detail = str(getattr(response, "text", ""))[:300]
             raise ModelTransportError("model returned HTTP %s: %s" % (response.status_code, detail))

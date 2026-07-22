@@ -21,3 +21,11 @@ def resolve_llm_reasoning_effort(value=None):
             % sorted(SUPPORTED_LLM_REASONING_EFFORTS)
         )
     return effort
+
+
+def llm_sampling_parameters(model_id, temperature):
+    """Return optional sampling parameters accepted by the selected LLM."""
+    normalized_model = str(model_id or "").strip().lower().rsplit("/", 1)[-1]
+    if normalized_model.startswith("gpt-5") or normalized_model.startswith("kimi-k3"):
+        return {}
+    return {"temperature": float(temperature)}

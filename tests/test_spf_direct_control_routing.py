@@ -27,15 +27,15 @@ def node_param(root, node_name, param_name):
     return param.get("value")
 
 
-class SpfDirectControlRoutingTest(unittest.TestCase):
-    def test_spf_bridge_defaults_to_dedicated_direct_position_topic(self):
+class SpfEgoControlRoutingTest(unittest.TestCase):
+    def test_spf_bridge_defaults_to_shared_ego_position_topic(self):
         bridge = launch_root(
             "ros_nodes/mission/see_point_fly_bridge/launch/see_point_fly_bridge.launch"
         )
         bringup = launch_root("launch/bringup_see_point_fly.launch")
 
-        self.assertEqual(arg_default(bridge, "goal_topic"), "/control/spf_position")
-        self.assertEqual(arg_default(bringup, "goal_topic"), "/control/spf_position")
+        self.assertEqual(arg_default(bridge, "goal_topic"), "/control/ego_position")
+        self.assertEqual(arg_default(bringup, "goal_topic"), "/control/ego_position")
         self.assertEqual(arg_default(bridge, "goal_projection_enabled"), "false")
         self.assertEqual(arg_default(bringup, "goal_projection_enabled"), "false")
         self.assertEqual(arg_default(bridge, "enable_topic"), "/spf/enable")
@@ -62,6 +62,14 @@ class SpfDirectControlRoutingTest(unittest.TestCase):
             "$(arg enable_topic)",
         )
         self.assertEqual(
+            node_param(bridge, "see_point_fly_bridge", "goal_topic"),
+            "$(arg goal_topic)",
+        )
+        self.assertEqual(
+            node_param(bridge, "see_point_fly_bridge", "stop_topic"),
+            "/control/stop",
+        )
+        self.assertEqual(
             node_param(bridge, "spf_task_executor", "enable_topic"),
             "$(arg enable_topic)",
         )
@@ -81,13 +89,15 @@ class SpfDirectControlRoutingTest(unittest.TestCase):
             node_param(bridge, "spf_task_executor", "goal_tolerance_yaw_deg"),
             "10.0",
         )
-    def test_control_interface_converts_spf_target_to_px4ctrl_command_topic(self):
+    def test_control_interface_routes_spf_ego_target_through_planner(self):
         control = launch_root(
             "ros_nodes/control/gameuav_control_interface/launch/control_interface.launch"
         )
         flight = launch_root("launch/bringup_flight_control.launch")
 
         self.assertEqual(arg_default(control, "spf_position_topic"), "/control/spf_position")
+        self.assertEqual(arg_default(control, "ego_position_topic"), "/control/ego_position")
+        self.assertEqual(arg_default(control, "planning_goal_topic"), "/planning/goal")
         self.assertEqual(arg_default(control, "spf_enable_topic"), "/spf/enable")
         self.assertEqual(arg_default(control, "mavros_state_topic"), "/mavros/state")
         self.assertEqual(arg_default(control, "spf_mavros_state_timeout_sec"), "2.5")

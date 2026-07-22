@@ -26,14 +26,15 @@ Current integration policy:
 
 - SPF does not publish MAVROS attitude/thrust setpoints directly.
 - SPF output is treated as a relative action suggestion.
-- The ROS bridge clamps the suggestion and publishes `/control/spf_position`.
-- The control interface converts that target to `PositionCommand` on
-  `/control/position_cmd`, which px4ctrl consumes directly; EGO is bypassed.
+- The ROS bridge clamps the suggestion and publishes `/control/ego_position`.
+- The control interface forwards that target to `/planning/goal`; EGO owns
+  trajectory generation and its output reaches px4ctrl through
+  `/control/ego_position_cmd` and `/control/position_cmd`, matching SMPF.
 - While XY error is at most `0.25 m`, Z error at most `0.20 m`, yaw error at
   most `10 deg`, and three-dimensional speed at most `0.25 m/s` continuously
-  for `0.5 s`, the target is settled. The adapter then stops
-  `/control/position_cmd`; PX4Ctrl's `0.5 s` command timeout returns it from
-  `CMD_CTRL` to `AUTO_HOVER`.
+  for `0.5 s`, the target is settled. The task loop then requests the next SPF
+  action after its inter-cycle delay. EGO finishes each local trajectory and
+  px4ctrl returns to hover when its trajectory command stream ends.
 - The bridge rejects every real goal publication unless the shared SPF session
   gate is explicitly enabled and MAVROS state is fresh, connected, and armed.
   The continuous task executor uses the same gate and additionally requires an
@@ -58,8 +59,8 @@ worker after changing the mode; `/health` and inference metadata report the
 effective mode.
 
 The PX4 adapter preserves the author's relative `ActionPoint` convention and
-faces the selected direction while moving. It replaces only the Tello SDK
-actuation layer with GameUAV's bounded direct-position path to px4ctrl. Task
+faces the selected direction while moving. It replaces the Tello SDK actuation
+layer with a bounded EGO target path shared with SMPF. Task
 timeouts, operator completion, and endpoint occupancy projection are local
 safety/integration behavior, not claims about the author implementation.
 
@@ -102,7 +103,7 @@ conversion. A task start is
 rejected unless MAVROS is connected, PX4 is already armed, odometry is fresh,
 and the vehicle is hovering inside the configured altitude and speed bounds.
 Use the ground-station preview inference for disarmed tabletop checks; preview
-does not publish `/control/spf_position`.
+does not publish `/control/ego_position`.
 
 ```bash
 # Enable both the direct-control bridge and task executor for this flight session.
@@ -127,8 +128,8 @@ Task states are `DISABLED`, `IDLE`, `WAITING_GOAL`, `WAITING_ARRIVAL`,
 version intentionally keeps the paper's operator-confirmed success criterion;
 automatic semantic completion detection is not inferred from position-target arrival.
 
-A one-shot `/spf/user_command` or manual `/control/spf_position` remains in
-`AUTO_HOVER` after arrival because neither source requests another goal. A
+A one-shot `/spf/user_command` remains in `AUTO_HOVER` after EGO completes its
+local trajectory because it does not request another goal. A
 continuous `/spf/task/start` loop later requests the next inference; its new goal
 returns PX4Ctrl to `CMD_CTRL`. The author implementation emits relative action
 points, not a task-level `final` or `done` result. This arrival-release behavior

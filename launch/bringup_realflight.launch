@@ -12,7 +12,8 @@
   <arg name="use_tiplight" default="false"/>
   <arg name="use_see_point_fly" default="false"/>
   <arg name="use_smpf" default="true"/>
-  <arg name="smpf_execution_enabled" default="false"/>
+  <arg name="smpf_execution_enabled" default="true"/>
+  <arg name="smpf_llm_model" default="gpt-5.2"/>
   <arg name="smpf_llm_reasoning_effort" default="$(optenv SMPF_LLM_REASONING_EFFORT low)"/>
   <arg name="spf_image_topic" default="/rgb1/image_raw"/>
   <arg name="spf_odom_topic" default="/vins_fusion/imu_propagate"/>
@@ -69,6 +70,7 @@
     <include file="$(dirname)/bringup_smpf.launch">
       <arg name="execution_enabled" value="$(arg smpf_execution_enabled)"/>
       <arg name="goal_topic" value="/control/ego_position"/>
+      <arg name="llm_model" value="$(arg smpf_llm_model)"/>
       <arg name="llm_reasoning_effort" value="$(arg smpf_llm_reasoning_effort)"/>
     </include>
   </group>

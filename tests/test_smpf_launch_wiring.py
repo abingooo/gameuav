@@ -28,7 +28,8 @@ class SmpfLaunchWiringTest(unittest.TestCase):
         self.assertEqual(defaults["realsense_align_depth"], "true")
         self.assertEqual(defaults["realsense_enable_sync"], "true")
         self.assertEqual(defaults["use_smpf"], "true")
-        self.assertEqual(defaults["smpf_execution_enabled"], "false")
+        self.assertEqual(defaults["smpf_execution_enabled"], "true")
+        self.assertEqual(defaults["smpf_llm_model"], "gpt-5.2")
         self.assertEqual(
             defaults["smpf_llm_reasoning_effort"],
             "$(optenv SMPF_LLM_REASONING_EFFORT low)",
@@ -51,6 +52,12 @@ class SmpfLaunchWiringTest(unittest.TestCase):
             smpf_args["llm_reasoning_effort"],
             "$(arg smpf_llm_reasoning_effort)",
         )
+        self.assertEqual(smpf_args["llm_model"], "$(arg smpf_llm_model)")
+
+    def test_control_interface_attitude_guard_is_disabled_by_default(self):
+        root = self._root("launch/bringup_control_interface.launch")
+        defaults = {node.attrib["name"]: node.attrib.get("default") for node in root.findall("arg")}
+        self.assertEqual(defaults["attitude_guard_enabled"], "false")
 
     def test_smpf_bridge_clears_stale_private_parameters(self):
         root = self._root("ros_nodes/mission/smpf_bridge/launch/smpf_bridge.launch")
@@ -59,10 +66,15 @@ class SmpfLaunchWiringTest(unittest.TestCase):
         names = {param.attrib["name"] for param in node.findall("param")}
         self.assertNotIn("experiment_log_path", names)
         values = {param.attrib["name"]: param.attrib.get("value") for param in node.findall("param")}
-        self.assertEqual(values["require_armed_for_execution"], "true")
-        self.assertEqual(values["min_execution_z"], "0.20")
+        self.assertEqual(values["require_armed_for_execution"], "false")
+        self.assertEqual(values["min_execution_z"], "0.0")
+        self.assertEqual(values["enable_max_speed"], "0.0")
+        self.assertEqual(values["arrival_settle_sec"], "0.0")
         self.assertEqual(values["goal_tolerance_yaw_deg"], "10.0")
         self.assertEqual(values["planning_yaw_topic"], "/planning/goal_yaw_deg")
+        self.assertEqual(values["debug_image_topic"], "/smpf/debug/annotated_image")
+        self.assertEqual(values["debug_depth_topic"], "/smpf/debug/depth_image")
+        self.assertEqual(values["debug_spheres_topic"], "/smpf/debug/object_spheres")
         self.assertEqual(values["yaw_refresh_hz"], "2.0")
         self.assertEqual(values["memory_association_distance_m"], "0.35")
         self.assertEqual(values["dynamic_memory_association_distance_m"], "1.50")
@@ -91,12 +103,14 @@ class SmpfLaunchWiringTest(unittest.TestCase):
             "$(arg follow_metric_odom_skew_sec)",
         )
         self.assertEqual(values["follow_sam_timeout_sec"], "$(arg follow_sam_timeout_sec)")
+        self.assertEqual(values["llm_model"], "$(arg llm_model)")
         self.assertEqual(values["llm_reasoning_effort"], "$(arg llm_reasoning_effort)")
 
         defaults = {node.attrib["name"]: node.attrib.get("default") for node in root.findall("arg")}
         self.assertEqual(defaults["follow_metric_frame_max_age_sec"], "1.0")
         self.assertEqual(defaults["follow_metric_odom_skew_sec"], "0.08")
         self.assertEqual(defaults["follow_sam_timeout_sec"], "0.75")
+        self.assertEqual(defaults["llm_model"], "gpt-5.2")
 
     def test_smpf_bringup_forwards_follow_freshness_contract(self):
         root = self._root("launch/bringup_smpf.launch")
@@ -104,6 +118,7 @@ class SmpfLaunchWiringTest(unittest.TestCase):
         self.assertEqual(defaults["follow_metric_frame_max_age_sec"], "1.0")
         self.assertEqual(defaults["follow_metric_odom_skew_sec"], "0.08")
         self.assertEqual(defaults["follow_sam_timeout_sec"], "0.75")
+        self.assertEqual(defaults["llm_model"], "gpt-5.2")
         include_args = {
             node.attrib["name"]: node.attrib.get("value")
             for node in root.find("include").findall("arg")
@@ -117,6 +132,7 @@ class SmpfLaunchWiringTest(unittest.TestCase):
             "$(arg follow_metric_odom_skew_sec)",
         )
         self.assertEqual(include_args["follow_sam_timeout_sec"], "$(arg follow_sam_timeout_sec)")
+        self.assertEqual(include_args["llm_model"], "$(arg llm_model)")
 
 
 if __name__ == "__main__":

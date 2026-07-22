@@ -75,6 +75,46 @@ class SmpfModelPlannerTest(unittest.TestCase):
         payload = session.post.call_args.kwargs["json"]
         self.assertEqual(payload["model"], "gpt-5.2")
         self.assertEqual(payload["reasoning_effort"], "low")
+        self.assertNotIn("temperature", payload)
+        self.assertEqual(planner.raw_responses[0]["body"], response.json.return_value)
+
+    def test_non_gpt5_completion_payload_keeps_temperature(self):
+        response = mock.Mock(status_code=200)
+        response.json.return_value = {
+            "choices": [{"message": {"content": '{"ok":true}'}}]
+        }
+        session = mock.Mock()
+        session.post.return_value = response
+        planner = ModelPlannerClient(
+            api_key="test",
+            base_url="http://localhost",
+            model_id="compatible-model",
+            temperature=0.1,
+            session=session,
+        )
+        planner._complete("test prompt")
+        payload = session.post.call_args.kwargs["json"]
+        self.assertEqual(payload["temperature"], 0.1)
+
+    def test_kimi_k3_completion_uses_provider_default_temperature(self):
+        response = mock.Mock(status_code=200)
+        response.json.return_value = {
+            "choices": [{"message": {"content": '{"ok":true}'}}]
+        }
+        session = mock.Mock()
+        session.post.return_value = response
+        planner = ModelPlannerClient(
+            api_key="test",
+            base_url="http://localhost",
+            model_id="kimi-k3",
+            temperature=0.1,
+            session=session,
+        )
+
+        planner._complete("test prompt")
+
+        payload = session.post.call_args.kwargs["json"]
+        self.assertNotIn("temperature", payload)
 
     def test_valid_flu_detour_is_accepted(self):
         plan = parse_and_validate_plan(

@@ -12,6 +12,7 @@ import numpy as np
 import requests
 
 from .model_defaults import DEFAULT_VLM_MODEL
+from .model_trace import model_response_snapshot
 
 
 DETECTION_SCHEMA = "smpf.detection.v1"
@@ -210,6 +211,7 @@ class VisionDetectorClient:
         self.temperature = float(temperature)
         self.max_attempts = int(max_attempts)
         self.last_attempts = 0
+        self.raw_responses = []
         if not self.api_key:
             raise ValueError("SMPF_VLM_API_KEY or SMPF_LLM_API_KEY is required")
         if not self.base_url:
@@ -234,6 +236,7 @@ class VisionDetectorClient:
         feedback = ""
         last_error = None
         self.last_attempts = 0
+        self.raw_responses = []
         for attempt in range(1, self.max_attempts + 1):
             self.last_attempts = attempt
             attempt_prompt = prompt + feedback
@@ -287,6 +290,7 @@ class VisionDetectorClient:
             raise DetectionTransportError("VLM request failed: %s" % exc) from exc
         except Exception as exc:
             raise DetectionTransportError("VLM request failed: %s" % exc) from exc
+        self.raw_responses.append(model_response_snapshot(response))
         if int(response.status_code) != 200:
             detail = str(getattr(response, "text", ""))[:300]
             raise DetectionTransportError("VLM returned HTTP %s: %s" % (response.status_code, detail))

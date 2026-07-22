@@ -23,6 +23,11 @@ def _redact(value, key=""):
     return value
 
 
+def redact_sensitive(value):
+    """Return a JSON-safe copy with credentials and non-finite values removed."""
+    return _redact(value)
+
+
 class JsonlExperimentLogger:
     """Write one independently parseable event per line for SPF/SMPF trials."""
 

@@ -17,3 +17,7 @@ Render the `.mmd` files with any Mermaid renderer, or paste them into a Markdown
   fixed parameters, and validation evidence.
 - `08_spf_position_manual_target.md`: safe manual target injection, coordinate
   conventions, execution gates, and downstream SPF-to-px4ctrl verification.
+- `09_vins_online_calibration_2026-07-21.md`: active VINS calibration after the
+  camera/IMU mechanical layout changed, including fixed-candidate validation.
+- `10_spf_smpf_ego_profiles.md`: implementation and experiment plan for mapped
+  EGO with SMPF and obstacle-free EGO trajectory generation with SPF.

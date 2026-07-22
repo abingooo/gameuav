@@ -178,7 +178,7 @@ class TaskLoop:
         self.goal_ack_deadline = None
         self.arrival_since = None
         self.state = "WAITING_ARRIVAL"
-        self.reason = "direct position target accepted"
+        self.reason = "EGO local target accepted"
         self.updated_at = now
         return True
 
@@ -226,7 +226,7 @@ class TaskLoop:
             self._finish("ERROR", "odometry became stale", now)
             return []
         if now > self.goal_deadline:
-            self._finish("TIMEOUT", "direct position target timeout", now)
+            self._finish("TIMEOUT", "EGO local target timeout", now)
             return []
 
         dx = float(odom["x"]) - self.current_goal["x"]

@@ -1,5 +1,9 @@
 # VINS Online Calibration - 2026-07-19
 
+> Historical result only. The camera/IMU mechanical layout changed afterward,
+> so production was recalibrated on 2026-07-21. See
+> `09_vins_online_calibration_2026-07-21.md` for the active result.
+
 ## Scope
 
 This calibration was performed with the vehicle disarmed and propellers removed.

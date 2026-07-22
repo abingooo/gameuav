@@ -153,13 +153,13 @@ modules:
 
   see_point_fly:
     type: launch
-    description: See-Point-Fly bridge; sends bounded position targets directly to px4ctrl through the control interface
+    description: See-Point-Fly bridge; sends bounded position targets through EGO
     file: launch/bringup_see_point_fly.launch
     args:
       image_topic: "/rgb1/image_raw"
       odom_topic: "/vins_fusion/imu_propagate"
       worker_url: "http://127.0.0.1:9310/infer"
-      goal_topic: "/control/spf_position"
+      goal_topic: "/control/ego_position"
     allowed_args:
       image_topic: null
       odom_topic: null
@@ -299,7 +299,8 @@ modules:
       use_tiplight: "false"
       use_see_point_fly: "false"
       use_smpf: "false"
-      smpf_execution_enabled: "false"
+      smpf_execution_enabled: "true"
+      smpf_llm_model: "gpt-5.2"
       smpf_llm_reasoning_effort: "low"
       spf_release_on_arrival: "true"
       spf_arrival_settle_sec: "0.5"
@@ -336,6 +337,7 @@ modules:
       smpf_execution_enabled:
         - "true"
         - "false"
+      smpf_llm_model: null
       smpf_llm_reasoning_effort:
         - "minimal"
         - "low"
@@ -375,7 +377,8 @@ modules:
       use_tiplight: "false"
       use_see_point_fly: "false"
       use_smpf: "true"
-      smpf_execution_enabled: "false"
+      smpf_execution_enabled: "true"
+      smpf_llm_model: "gpt-5.2"
       smpf_llm_reasoning_effort: "low"
       realsense_enable_sync: "true"
       realsense_align_depth: "true"
@@ -414,6 +417,7 @@ modules:
       smpf_execution_enabled:
         - "true"
         - "false"
+      smpf_llm_model: null
       smpf_llm_reasoning_effort:
         - "minimal"
         - "low"
@@ -438,15 +442,17 @@ modules:
 
   smpf:
     type: launch
-    description: "SMPF calibrated RGB-D model planner bridge; execution disabled by default"
+    description: "SMPF calibrated RGB-D model planner bridge; execution enabled by default"
     file: launch/bringup_smpf.launch
     args:
-      execution_enabled: "false"
+      execution_enabled: "true"
+      llm_model: "gpt-5.2"
       llm_reasoning_effort: "low"
     allowed_args:
       execution_enabled:
         - "true"
         - "false"
+      llm_model: null
       llm_reasoning_effort:
         - "minimal"
         - "low"

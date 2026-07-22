@@ -18,7 +18,7 @@ class WaypointExecutionLoop:
         self,
         goal_timeout_sec=45.0,
         task_timeout_sec=300.0,
-        arrival_settle_sec=1.0,
+        arrival_settle_sec=0.0,
         goal_tolerance_xy=0.25,
         goal_tolerance_z=0.20,
         arrival_max_speed=0.25,
@@ -110,7 +110,8 @@ class WaypointExecutionLoop:
         if odom is None or now - float(odom.get("stamp", -math.inf)) > self.odom_timeout_sec:
             self._finish("ERROR", "odometry is stale", now)
             return [{"type": "terminal", "state": self.state, "reason": self.reason}]
-        if now - self.goal_started_at > self.goal_timeout_sec:
+        is_final_waypoint = self._index == len(self._waypoints) - 1
+        if is_final_waypoint and now - self.goal_started_at > self.goal_timeout_sec:
             self._finish("TIMEOUT", "waypoint timeout", now)
             return [{"type": "terminal", "state": self.state, "reason": self.reason}]
 
@@ -144,7 +145,8 @@ class WaypointExecutionLoop:
             self.arrival_since = now
             self.reason = "waypoint reached; waiting to settle"
             self.updated_at = now
-            return []
+            if self.arrival_settle_sec > 0.0:
+                return []
         if now - self.arrival_since < self.arrival_settle_sec:
             return []
 

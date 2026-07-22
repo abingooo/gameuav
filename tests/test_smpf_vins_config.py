@@ -21,7 +21,7 @@ class SmpfVinsConfigTest(unittest.TestCase):
         try:
             self.assertEqual(int(storage.getNode("estimate_extrinsic").real()), 0)
             self.assertEqual(int(storage.getNode("estimate_td").real()), 0)
-            self.assertAlmostEqual(storage.getNode("td").real(), 0.012404321603)
+            self.assertAlmostEqual(storage.getNode("td").real(), 0.0017191652713265113)
             body_from_cam0 = storage.getNode("body_T_cam0").mat()
             body_from_cam1 = storage.getNode("body_T_cam1").mat()
         finally:
@@ -36,7 +36,7 @@ class SmpfVinsConfigTest(unittest.TestCase):
             )
 
         relative = np.linalg.inv(body_from_cam0).dot(body_from_cam1)
-        self.assertAlmostEqual(float(np.linalg.norm(relative[:3, 3])), 0.049368615, places=6)
+        self.assertAlmostEqual(float(np.linalg.norm(relative[:3, 3])), 0.050226251, places=6)
 
     def test_online_calibration_profile_is_isolated_and_observable(self):
         storage = cv2.FileStorage(str(CALIBRATION_CONFIG), cv2.FILE_STORAGE_READ)
@@ -44,7 +44,7 @@ class SmpfVinsConfigTest(unittest.TestCase):
             self.assertEqual(int(storage.getNode("estimate_extrinsic").real()), 1)
             self.assertEqual(int(storage.getNode("estimate_td").real()), 1)
             self.assertEqual(int(storage.getNode("show_track").real()), 1)
-            self.assertAlmostEqual(storage.getNode("td").real(), 0.0034930345815077234)
+            self.assertAlmostEqual(storage.getNode("td").real(), 0.0017191652713265113)
             output_path = storage.getNode("output_path").string()
             transforms = [
                 storage.getNode("body_T_cam0").mat(),
@@ -85,7 +85,7 @@ class SmpfVinsConfigTest(unittest.TestCase):
         try:
             self.assertEqual(int(storage.getNode("estimate_extrinsic").real()), 0)
             self.assertEqual(int(storage.getNode("estimate_td").real()), 0)
-            self.assertAlmostEqual(storage.getNode("td").real(), 0.012404321603)
+            self.assertAlmostEqual(storage.getNode("td").real(), 0.0017191652713265113)
             body_from_cam0 = storage.getNode("body_T_cam0").mat()
             body_from_cam1 = storage.getNode("body_T_cam1").mat()
         finally:
@@ -100,7 +100,7 @@ class SmpfVinsConfigTest(unittest.TestCase):
             self.assertAlmostEqual(float(np.linalg.det(transform[:3, :3])), 1.0, places=9)
 
         relative = np.linalg.inv(body_from_cam0).dot(body_from_cam1)
-        self.assertAlmostEqual(float(np.linalg.norm(relative[:3, 3])), 0.049368615, places=6)
+        self.assertAlmostEqual(float(np.linalg.norm(relative[:3, 3])), 0.050226251, places=6)
 
         launch_text = CANDIDATE_LAUNCH.read_text(encoding="utf-8")
         self.assertIn("fast_drone_250_calibrated_candidate.yaml", launch_text)

@@ -7,7 +7,7 @@ topics:
   odom: "/vins_fusion/imu_propagate"
   command: "/spf/user_command"
   enable: "/spf/enable"
-  goal: "/control/spf_position"
+  goal: "/control/ego_position"
   status: "/spf/status"
 
 safety:

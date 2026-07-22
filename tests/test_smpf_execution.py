@@ -29,6 +29,41 @@ class SmpfExecutionTest(unittest.TestCase):
         events = self.loop.tick(2.6, _odom(2, 0, 1, 0.1, 2.6))
         self.assertEqual(events[0]["state"], "SUCCESS")
 
+    def test_zero_settle_advances_on_first_in_range_sample(self):
+        loop = WaypointExecutionLoop(arrival_settle_sec=0.0, odom_timeout_sec=1.0)
+        loop.set_enabled(True, 0.0)
+        loop.start("task", [(1, 0, 1), (2, 0, 1)], 0.0)
+
+        events = loop.tick(0.2, _odom(1, 0, 1, 0.1, 0.2))
+        self.assertEqual(events[0]["goal"], (2.0, 0.0, 1.0))
+
+    def test_intermediate_waypoint_does_not_use_goal_timeout(self):
+        loop = WaypointExecutionLoop(
+            goal_timeout_sec=1.0,
+            task_timeout_sec=10.0,
+            arrival_settle_sec=0.5,
+            odom_timeout_sec=1.0,
+        )
+        loop.set_enabled(True, 0.0)
+        loop.start("task", [(1, 0, 1), (2, 0, 1)], 0.0)
+
+        self.assertEqual(loop.tick(2.0, _odom(0, 0, 1, 0.0, 2.0)), [])
+        self.assertEqual(loop.state, "WAITING_ARRIVAL")
+
+    def test_final_waypoint_still_uses_goal_timeout(self):
+        loop = WaypointExecutionLoop(
+            goal_timeout_sec=1.0,
+            task_timeout_sec=10.0,
+            arrival_settle_sec=0.5,
+            odom_timeout_sec=1.0,
+        )
+        loop.set_enabled(True, 0.0)
+        loop.start("task", [(1, 0, 1)], 0.0)
+
+        events = loop.tick(2.0, _odom(0, 0, 1, 0.0, 2.0))
+        self.assertEqual(events[0]["state"], "TIMEOUT")
+        self.assertEqual(events[0]["reason"], "waypoint timeout")
+
     def test_high_speed_prevents_arrival(self):
         self.loop.set_enabled(True, 0.0)
         self.loop.start("task", [(1, 0, 1)], 0.0)

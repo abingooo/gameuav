@@ -183,8 +183,9 @@ rostopic pub -1 /spf/enable std_msgs/Bool "data: false"
 
 ## 9. 正常 SPF 任务入口
 
-正常 SPF 实验不应手工构造 `/control/spf_position`。应打开执行门后向
-`/spf/user_command` 发送自然语言任务，由作者链路生成目标：
+正常 SPF 实验不应手工构造 `/control/spf_position`。当前正式 SPF 链路应打开
+执行门后向 `/spf/user_command` 发送自然语言任务，由作者链路生成目标并发布到
+`/control/ego_position`，再交给 EGO：
 
 ```bash
 python3 tools/agentctl.py ros spf_task_enable \
@@ -198,11 +199,11 @@ python3 tools/agentctl.py ros spf_user_command \
 
 手工目标适用于隔离检查
 `control_interface -> /control/position_cmd -> px4ctrl`；正常任务入口才覆盖 SPF
-感知、模型推理和动作到目标点的转换。
+感知、模型推理、动作到目标点的转换以及统一的 EGO 执行链路。
 
 `/spf/user_command` 是单次推理入口，到达后不会自动请求新目标。需要连续执行同一条
 语义任务时使用 `/spf/task/start`；局部点满足同一组到达条件后，TaskLoop 进入轮间
-延时，控制门面并行释放位置命令，随后 TaskLoop 请求下一轮 SPF。作者 SPF 没有任务级
+延时，上一条 EGO 局部轨迹结束后，TaskLoop 请求下一轮 SPF。作者 SPF 没有任务级
 `final`/`done` 输出，最终成功仍由
 操作员通过 `/spf/task/control` 的 `complete`/`success` 确认。到达释放属于
 GameUAV/PX4Ctrl 控制适配，不能作为作者模型新增能力或语义任务完成证据。连续任务

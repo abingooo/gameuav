@@ -2,7 +2,7 @@
   <arg name="image_topic" default="/rgb1/image_raw"/>
   <arg name="odom_topic" default="/vins_fusion/imu_propagate"/>
   <arg name="worker_url" default="http://127.0.0.1:9310/infer"/>
-  <arg name="goal_topic" default="/control/spf_position"/>
+  <arg name="goal_topic" default="/control/ego_position"/>
   <arg name="goal_projection_enabled" default="false"/>
   <arg name="enable_topic" default="/spf/enable"/>
 

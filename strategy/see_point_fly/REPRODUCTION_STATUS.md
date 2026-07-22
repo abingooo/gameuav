@@ -70,24 +70,23 @@ RGB1 + exact prompt
   -> author TelloActionProjector
   -> relative ActionPoint (right, forward, up)
   -> world-frame bounded position target
-  -> /control/spf_position
-  -> /control/position_cmd
+  -> /control/ego_position
+  -> /planning/goal
+  -> EGO -> /control/ego_position_cmd -> /control/position_cmd
   -> px4ctrl
 ```
 
-EGO is bypassed. Endpoint projection against the EGO occupancy cloud is disabled
-in the launch files and in the bridge's direct-construction default. Current
+SPF and SMPF now share EGO as the trajectory planner. Endpoint projection inside
+the SPF bridge remains disabled; EGO performs its normal depth-map planning. Current
 platform bounds are `1.5 m` horizontal step, `0.3 m` vertical step, and
 `0.4-1.5 m` target altitude. These PX4 integration bounds and the switch from
 timed RC primitives to a position setpoint mean local results are a faithful
 author-policy port, not a numerical reproduction of the Tello dynamics.
 
-The GameUAV control adapter defines local-goal arrival as XY error `<=0.25 m`,
+The SPF task executor defines local-goal arrival as XY error `<=0.25 m`,
 Z error `<=0.20 m`, yaw error `<=10 deg`, and three-dimensional speed
-`<=0.25 m/s`, all held continuously for `0.5 s`. It then clears cached SPF/EGO
-motion commands and stops `/control/position_cmd`; after PX4Ctrl's configured
-`0.5 s` command timeout, `CMD_CTRL` returns to `AUTO_HOVER`. A one-shot command
-or manual target remains hovering. Only the continuous `/spf/task/start` loop
+`<=0.25 m/s`, all held continuously for `0.5 s`. A one-shot command remains
+hovering after EGO completes the local trajectory. Only the continuous `/spf/task/start` loop
 requests another inference after its inter-cycle delay, and a new target returns
 PX4Ctrl to `CMD_CTRL`. This is GameUAV/PX4Ctrl integration behavior, not an
 author-policy capability or semantic completion signal. Any terminal continuous
@@ -120,14 +119,14 @@ it; results cannot be attributed to the planning methods alone.
 - Command preservation through the ROS bridge and worker boundary: verified by
   tests.
 - Primary mode: live worker reports `adaptive_mode`.
-- EGO occupancy projection: live ROS parameter is `false`.
-- Direct SPF to px4ctrl topic routing: live ROS graph verified.
+- SPF bridge endpoint projection: live ROS parameter is `false`.
+- Unified SPF/SMPF EGO routing: configured and covered by launch tests; live ROS graph verification remains pending.
 - Arrival release: configured for the thresholds above and covered by adapter
   tests; the resulting PX4Ctrl state transition still requires real-flight
   verification.
 - Armed-state publication gate and disabled tabletop execution: verified live;
   a disarmed task prompt was rejected before worker inference and produced no
-  `/control/spf_position` message.
+  `/control/ego_position` message.
 - Common dynamic attitude gate: implemented for both methods. Stale PX4/VINS
   attitude or roll/pitch disagreement above `15 deg` clears cached control and
   requires a new command after recovery. The operator-approved threshold permits
