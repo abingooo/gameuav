@@ -7,6 +7,7 @@
   <arg name="realsense_enable_sync" default="true"/>
   <arg name="realsense_align_depth" default="true"/>
   <arg name="drone_id" default="0"/>
+  <arg name="ego_profile" default="mapped"/>
   <arg name="px4ctrl_no_rc" default="false"/>
   <arg name="px4ctrl_enable_auto_arm" default="true"/>
   <arg name="use_tiplight" default="false"/>
@@ -52,6 +53,7 @@
   <include file="$(dirname)/bringup_ego.launch">
     <arg name="drone_id" value="$(arg drone_id)"/>
     <arg name="position_cmd_topic" value="$(arg control_ego_position_cmd_topic)"/>
+    <arg name="ego_profile" value="$(arg ego_profile)"/>
   </include>
 
   <group if="$(arg use_tiplight)">

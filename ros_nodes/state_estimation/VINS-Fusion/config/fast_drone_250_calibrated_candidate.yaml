@@ -1,6 +1,6 @@
 %YAML:1.0
 
-# Fixed candidate generated from the 2026-07-21 sensor-only online calibration.
+# Fixed candidate generated from the validated 2026-07-21 sensor-only calibration.
 imu: 1
 num_of_cam: 2
 

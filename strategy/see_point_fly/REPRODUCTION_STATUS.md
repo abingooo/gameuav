@@ -76,8 +76,9 @@ RGB1 + exact prompt
   -> px4ctrl
 ```
 
-SPF and SMPF now share EGO as the trajectory planner. Endpoint projection inside
-the SPF bridge remains disabled; EGO performs its normal depth-map planning. Current
+SPF and SMPF share EGO trajectory generation and px4ctrl. Endpoint projection inside
+the SPF bridge remains disabled. SPF is started with `egoctrl_nomap`, so EGO runs
+in `free_space` without depth/point-cloud scene mapping; SMPF uses mapped EGO. Current
 platform bounds are `1.5 m` horizontal step, `0.3 m` vertical step, and
 `0.4-1.5 m` target altitude. These PX4 integration bounds and the switch from
 timed RC primitives to a position setpoint mean local results are a faithful

@@ -1,5 +1,7 @@
 #include "plan_env/grid_map.h"
 
+#include <stdexcept>
+
 // #define current_img_ md_.depth_image_[image_cnt_ & 1]
 // #define last_img_ md_.depth_image_[!(image_cnt_ & 1)]
 
@@ -47,6 +49,15 @@ void GridMap::initMap(ros::NodeHandle &nh)
   node_.param("grid_map/pose_type", mp_.pose_type_, 1);
 
   node_.param("grid_map/frame_id", mp_.frame_id_, string("world"));
+  node_.param("grid_map/ego_profile", mp_.ego_profile_, string("mapped"));
+  if (mp_.ego_profile_ != "mapped" && mp_.ego_profile_ != "free_space")
+  {
+    ROS_FATAL_STREAM("Invalid EGO profile '" << mp_.ego_profile_
+                                             << "'; expected mapped or free_space");
+    throw std::invalid_argument("invalid EGO profile: " + mp_.ego_profile_);
+  }
+  mp_.obstacle_mapping_enabled_ = mp_.ego_profile_ == "mapped";
+  node_.setParam("grid_map/obstacle_mapping_enabled", mp_.obstacle_mapping_enabled_);
   node_.param("grid_map/local_map_margin", mp_.local_map_margin_, 1);
   node_.param("grid_map/ground_height", mp_.ground_height_, 1.0);
 
@@ -99,31 +110,35 @@ void GridMap::initMap(ros::NodeHandle &nh)
 
   /* init callback */
 
-  depth_sub_.reset(new message_filters::Subscriber<sensor_msgs::Image>(node_, "grid_map/depth", 50));
-  extrinsic_sub_ = node_.subscribe<nav_msgs::Odometry>(
-      "/vins_fusion/extrinsic", 10, &GridMap::extrinsicCallback, this); //sub
-
-  if (mp_.pose_type_ == POSE_STAMPED)
+  if (mp_.obstacle_mapping_enabled_)
   {
-    pose_sub_.reset(
-        new message_filters::Subscriber<geometry_msgs::PoseStamped>(node_, "grid_map/pose", 25));
+    depth_sub_.reset(new message_filters::Subscriber<sensor_msgs::Image>(node_, "grid_map/depth", 50));
+    extrinsic_sub_ = node_.subscribe<nav_msgs::Odometry>(
+        "/vins_fusion/extrinsic", 10, &GridMap::extrinsicCallback, this);
 
-    sync_image_pose_.reset(new message_filters::Synchronizer<SyncPolicyImagePose>(
-        SyncPolicyImagePose(100), *depth_sub_, *pose_sub_));
-    sync_image_pose_->registerCallback(boost::bind(&GridMap::depthPoseCallback, this, _1, _2));
+    if (mp_.pose_type_ == POSE_STAMPED)
+    {
+      pose_sub_.reset(
+          new message_filters::Subscriber<geometry_msgs::PoseStamped>(node_, "grid_map/pose", 25));
+
+      sync_image_pose_.reset(new message_filters::Synchronizer<SyncPolicyImagePose>(
+          SyncPolicyImagePose(100), *depth_sub_, *pose_sub_));
+      sync_image_pose_->registerCallback(boost::bind(&GridMap::depthPoseCallback, this, _1, _2));
+    }
+    else if (mp_.pose_type_ == ODOMETRY)
+    {
+      odom_sub_.reset(new message_filters::Subscriber<nav_msgs::Odometry>(
+          node_, "grid_map/odom", 100, ros::TransportHints().tcpNoDelay()));
+
+      sync_image_odom_.reset(new message_filters::Synchronizer<SyncPolicyImageOdom>(
+          SyncPolicyImageOdom(100), *depth_sub_, *odom_sub_));
+      sync_image_odom_->registerCallback(boost::bind(&GridMap::depthOdomCallback, this, _1, _2));
+    }
+
+    indep_cloud_sub_ =
+        node_.subscribe<sensor_msgs::PointCloud2>("grid_map/cloud", 10, &GridMap::cloudCallback, this);
   }
-  else if (mp_.pose_type_ == ODOMETRY)
-  {
-    odom_sub_.reset(new message_filters::Subscriber<nav_msgs::Odometry>(node_, "grid_map/odom", 100, ros::TransportHints().tcpNoDelay()));
 
-    sync_image_odom_.reset(new message_filters::Synchronizer<SyncPolicyImageOdom>(
-        SyncPolicyImageOdom(100), *depth_sub_, *odom_sub_));
-    sync_image_odom_->registerCallback(boost::bind(&GridMap::depthOdomCallback, this, _1, _2));
-  }
-
-  // use odometry and point cloud
-  indep_cloud_sub_ =
-      node_.subscribe<sensor_msgs::PointCloud2>("grid_map/cloud", 10, &GridMap::cloudCallback, this);
   indep_odom_sub_ =
       node_.subscribe<nav_msgs::Odometry>("grid_map/odom", 10, &GridMap::odomCallback, this);
 
@@ -133,12 +148,19 @@ void GridMap::initMap(ros::NodeHandle &nh)
   map_pub_ = node_.advertise<sensor_msgs::PointCloud2>("grid_map/occupancy", 10);
   map_inf_pub_ = node_.advertise<sensor_msgs::PointCloud2>("grid_map/occupancy_inflate", 10);
 
+  if (mp_.obstacle_mapping_enabled_)
+    ROS_INFO("EGO profile=mapped: depth/point-cloud obstacle mapping enabled");
+  else
+    ROS_WARN("EGO profile=free_space: scene obstacle mapping and depth-loss checks disabled");
+
   md_.occ_need_update_ = false;
   md_.local_updated_ = false;
   md_.has_first_depth_ = false;
   md_.has_odom_ = false;
   md_.has_cloud_ = false;
   md_.image_cnt_ = 0;
+  md_.local_bound_min_ = Eigen::Vector3i::Zero();
+  md_.local_bound_max_ = Eigen::Vector3i::Zero();
   md_.last_occ_update_time_.fromSec(0);
 
   md_.fuse_time_ = 0.0;
@@ -648,6 +670,9 @@ void GridMap::visCallback(const ros::TimerEvent & /*event*/)
 
 void GridMap::updateOccupancyCallback(const ros::TimerEvent & /*event*/)
 {
+  if (!mp_.obstacle_mapping_enabled_)
+    return;
+
   if (md_.last_occ_update_time_.toSec() < 1.0 ) md_.last_occ_update_time_ = ros::Time::now();
   
   if (!md_.occ_need_update_)
@@ -693,6 +718,9 @@ void GridMap::updateOccupancyCallback(const ros::TimerEvent & /*event*/)
 void GridMap::depthPoseCallback(const sensor_msgs::ImageConstPtr &img,
                                 const geometry_msgs::PoseStampedConstPtr &pose)
 {
+  if (!mp_.obstacle_mapping_enabled_)
+    return;
+
   /* get depth image */
   cv_bridge::CvImagePtr cv_ptr;
   cv_ptr = cv_bridge::toCvCopy(img, img->encoding);
@@ -740,6 +768,9 @@ void GridMap::odomCallback(const nav_msgs::OdometryConstPtr &odom)
 
 void GridMap::cloudCallback(const sensor_msgs::PointCloud2ConstPtr &img)
 {
+  if (!mp_.obstacle_mapping_enabled_)
+    return;
+
 
   pcl::PointCloud<pcl::PointXYZ> latest_cloud;
   pcl::fromROSMsg(*img, latest_cloud);
@@ -969,6 +1000,9 @@ void GridMap::extrinsicCallback(const nav_msgs::OdometryConstPtr &odom)
 void GridMap::depthOdomCallback(const sensor_msgs::ImageConstPtr &img,
                                 const nav_msgs::OdometryConstPtr &odom)
 {
+  if (!mp_.obstacle_mapping_enabled_)
+    return;
+
   /* get pose */
   Eigen::Quaterniond body_q = Eigen::Quaterniond(odom->pose.pose.orientation.w,
                                                  odom->pose.pose.orientation.x,

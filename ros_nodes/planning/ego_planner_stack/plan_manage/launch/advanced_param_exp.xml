@@ -56,6 +56,7 @@
 
   <!-- drone_id: EGO Planner 内部轨迹编号；跨机器身份由 gateway 网络消息携带 -->
   <arg name="drone_id"/>
+  <arg name="ego_profile" default="mapped"/>
   <arg name="bspline_topic" default="drone_$(arg drone_id)_planning/bspline"/>
   <arg name="data_display_topic" default="drone_$(arg drone_id)_planning/data_display"/>
   <arg name="broadcast_bspline_topic" default="broadcast_bspline"/>
@@ -149,6 +150,7 @@
     <param name="grid_map/show_occ_time"  value="false"/> <!-- 是否显示占用时间 -->
     <param name="grid_map/pose_type"     value="2"/>  <!-- 位姿类型选择 -->
     <param name="grid_map/frame_id"      value="world"/> <!-- 地图坐标系 -->
+    <param name="grid_map/ego_profile" value="$(arg ego_profile)"/>
 
   <!-- planner manager 轨迹管理参数 -->
     <param name="manager/max_vel" value="$(arg max_vel)" type="double"/> <!-- 规划最大速度 -->

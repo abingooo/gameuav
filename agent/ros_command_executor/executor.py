@@ -537,7 +537,12 @@ class RosCommandExecutor:
 
         if not checks_ok:
             result["executed"] = False
-            result["detail"] = "safety checks failed"
+            failed_checks = [check for check in checks if not check.get("ok", False)]
+            failed_details = [
+                "%s: %s" % (check.get("name", "unknown"), check.get("detail", "failed"))
+                for check in failed_checks
+            ]
+            result["detail"] = "safety checks failed: %s" % "; ".join(failed_details)
             return result
 
         if dry_run:

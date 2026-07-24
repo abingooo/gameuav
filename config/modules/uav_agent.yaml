@@ -148,8 +148,12 @@ modules:
     file: launch/bringup_ego.launch
     args:
       drone_id: "0"
+      ego_profile: "mapped"
     allowed_args:
       drone_id: null
+      ego_profile:
+        - "mapped"
+        - "free_space"
 
   see_point_fly:
     type: launch
@@ -296,12 +300,99 @@ modules:
     file: launch/bringup_realflight.launch
     args:
       drone_id: "0"
+      ego_profile: "mapped"
       use_tiplight: "false"
       use_see_point_fly: "false"
       use_smpf: "false"
       smpf_execution_enabled: "true"
       smpf_llm_model: "gpt-5.2"
       smpf_llm_reasoning_effort: "low"
+      spf_release_on_arrival: "true"
+      spf_arrival_settle_sec: "0.5"
+    allowed_args:
+      fcu_url: null
+      camera: null
+      camera_serial_no: null
+      camera_usb_port_id: null
+      enable_realsense_color:
+        - "true"
+        - "false"
+      realsense_enable_sync:
+        - "true"
+        - "false"
+      realsense_align_depth:
+        - "true"
+        - "false"
+      drone_id: null
+      ego_profile:
+        - "mapped"
+        - "free_space"
+      px4ctrl_no_rc:
+        - "true"
+        - "false"
+      px4ctrl_enable_auto_arm:
+        - "true"
+        - "false"
+      use_tiplight:
+        - "true"
+        - "false"
+      use_see_point_fly:
+        - "true"
+        - "false"
+      use_smpf:
+        - "true"
+        - "false"
+      smpf_execution_enabled:
+        - "true"
+        - "false"
+      smpf_llm_model: null
+      smpf_llm_reasoning_effort:
+        - "minimal"
+        - "low"
+        - "medium"
+        - "high"
+      spf_image_topic: null
+      spf_odom_topic: null
+      spf_worker_url: null
+      configure_mavros_stream_rates:
+        - "true"
+        - "false"
+      control_ego_position_cmd_topic: null
+      control_output_position_cmd_topic: null
+      spf_release_on_arrival:
+        - "true"
+        - "false"
+      spf_arrival_tolerance_xy: null
+      spf_arrival_tolerance_z: null
+      spf_arrival_tolerance_yaw_deg: null
+      spf_arrival_max_speed: null
+      spf_arrival_settle_sec: null
+
+  egoctrl:
+    type: launch
+    description: "SMPF flight stack: mapped EGO with RealSense obstacle avoidance"
+    conflicts:
+      - egoctrl_nomap
+    file: launch/bringup_realflight.launch
+    pre_start:
+      command:
+        - python3
+        - tools/reboot_fcu_before_egoctrl.py
+        - --fcu-url
+        - "{fcu_url}"
+      timeout: 55
+    args:
+      fcu_url: "/dev/serial/by-id/usb-Auterion_PX4_FMU_v6C.x_0-if00:57600"
+      drone_id: "0"
+      ego_profile: "mapped"
+      use_tiplight: "false"
+      use_see_point_fly: "false"
+      use_smpf: "true"
+      smpf_execution_enabled: "true"
+      smpf_llm_model: "gpt-5.2"
+      smpf_llm_reasoning_effort: "low"
+      realsense_enable_sync: "true"
+      realsense_align_depth: "true"
       spf_release_on_arrival: "true"
       spf_arrival_settle_sec: "0.5"
     allowed_args:
@@ -360,9 +451,11 @@ modules:
       spf_arrival_max_speed: null
       spf_arrival_settle_sec: null
 
-  egoctrl:
+  egoctrl_nomap:
     type: launch
-    description: "One-click single-UAV EgoCtrl stack: MAVROS + RealSense + VINS + EGO + px4ctrl"
+    description: "SPF flight stack: free-space EGO without scene obstacle mapping"
+    conflicts:
+      - egoctrl
     file: launch/bringup_realflight.launch
     pre_start:
       command:
@@ -374,12 +467,10 @@ modules:
     args:
       fcu_url: "/dev/serial/by-id/usb-Auterion_PX4_FMU_v6C.x_0-if00:57600"
       drone_id: "0"
+      ego_profile: "free_space"
       use_tiplight: "false"
       use_see_point_fly: "false"
-      use_smpf: "true"
-      smpf_execution_enabled: "true"
-      smpf_llm_model: "gpt-5.2"
-      smpf_llm_reasoning_effort: "low"
+      use_smpf: "false"
       realsense_enable_sync: "true"
       realsense_align_depth: "true"
       spf_release_on_arrival: "true"
@@ -408,21 +499,6 @@ modules:
       use_tiplight:
         - "true"
         - "false"
-      use_see_point_fly:
-        - "true"
-        - "false"
-      use_smpf:
-        - "true"
-        - "false"
-      smpf_execution_enabled:
-        - "true"
-        - "false"
-      smpf_llm_model: null
-      smpf_llm_reasoning_effort:
-        - "minimal"
-        - "low"
-        - "medium"
-        - "high"
       spf_image_topic: null
       spf_odom_topic: null
       spf_worker_url: null

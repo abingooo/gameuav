@@ -35,6 +35,16 @@ def write_config(path):
             },
             "sleepy": {
                 "type": "process",
+                "conflicts": ["sleepy_alt"],
+                "command": [
+                    sys.executable,
+                    "-c",
+                    "import signal,time; signal.signal(signal.SIGINT, lambda s,f: exit(0)); time.sleep(60)",
+                ],
+            },
+            "sleepy_alt": {
+                "type": "process",
+                "conflicts": ["sleepy"],
                 "command": [
                     sys.executable,
                     "-c",
@@ -115,6 +125,20 @@ class LaunchManagerTest(unittest.TestCase):
             stopped = manager.stop("sleepy", timeout=2.0)
             self.assertEqual(stopped["status"], "exited")
             self.assertIn(stopped["returncode"], (0, -signal.SIGINT))
+
+    def test_conflicting_modules_cannot_run_together(self):
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as tmp:
+            manager = self.make_manager(Path(tmp))
+            manager.start("sleepy")
+
+            with self.assertRaisesRegex(ModuleRuntimeError, "stop them first"):
+                manager.start("sleepy_alt")
+
+            self.assertEqual(manager.status("sleepy_alt")["status"], "stopped")
+            manager.stop("sleepy", timeout=2.0)
 
     def test_autostart_processes_marked_modules(self):
         import tempfile

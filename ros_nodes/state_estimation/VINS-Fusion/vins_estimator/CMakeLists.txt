@@ -33,6 +33,11 @@ include_directories(
 
 catkin_package()
 
+catkin_install_python(PROGRAMS
+    scripts/vins_health_monitor.py
+    DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)
+
 add_library(vins_lib
     src/estimator/parameters.cpp
     src/estimator/estimator.cpp
@@ -61,4 +66,3 @@ target_link_libraries(kitti_odom_test vins_lib)
 
 add_executable(kitti_gps_test src/KITTIGPSTest.cpp)
 target_link_libraries(kitti_gps_test vins_lib) 
-

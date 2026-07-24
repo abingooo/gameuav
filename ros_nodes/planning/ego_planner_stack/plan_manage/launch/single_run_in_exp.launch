@@ -6,6 +6,8 @@
     <arg name="obj_num" default="10" />
     <!-- drone_id: EGO Planner 内部轨迹编号；单机默认 0，跨机器身份不放 ROS topic 前缀 -->
     <arg name="drone_id" default="0"/>
+    <!-- mapped: RealSense occupancy mapping; free_space: trajectory shaping only -->
+    <arg name="ego_profile" default="mapped"/>
 
     <!-- map_size_x: 地图在 X 轴方向的范围（米），传入栅格地图 -->
     <arg name="map_size_x" default="100"/>
@@ -26,6 +28,7 @@
     <include file="$(find ego_planner)/launch/advanced_param_exp.xml">
         <!-- drone_id: 传给 ego_planner 的内部轨迹编号，保留以兼容原始 planner -->
         <arg name="drone_id" value="$(arg drone_id)"/>
+        <arg name="ego_profile" value="$(arg ego_profile)"/>
         <!-- map_size_x_: ego_planner 使用的 X 方向地图范围 -->
         <arg name="map_size_x_" value="$(arg map_size_x)"/>
         <!-- map_size_y_: ego_planner 使用的 Y 方向地图范围 -->

@@ -6,6 +6,19 @@ import math
 import yaml
 
 
+MAV_STATE_NAMES = {
+    0: "UNINIT",
+    1: "BOOT",
+    2: "CALIBRATING",
+    3: "STANDBY",
+    4: "ACTIVE",
+    5: "CRITICAL",
+    6: "EMERGENCY",
+    7: "POWEROFF",
+    8: "FLIGHT_TERMINATION",
+}
+
+
 @dataclass
 class SafetyCheckResult:
     name: str
@@ -328,6 +341,19 @@ class RosSafetyChecker:
                     ok=armed == expected,
                     detail="armed=%s" % armed,
                     value=armed,
+                )
+            )
+
+        allowed_system_statuses = state_check.get("allowed_system_statuses")
+        if allowed_system_statuses is not None:
+            system_status = message.get("system_status")
+            status_name = MAV_STATE_NAMES.get(system_status, "UNKNOWN")
+            results.append(
+                SafetyCheckResult(
+                    name="%s.system_status" % name,
+                    ok=system_status in allowed_system_statuses,
+                    detail="system_status=%s (%s)" % (system_status, status_name),
+                    value=system_status,
                 )
             )
 

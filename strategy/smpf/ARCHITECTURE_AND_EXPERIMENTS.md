@@ -268,12 +268,13 @@ only the five categories evaluated by the paper in the real world.
 For the primary comparison:
 
 - SPF remains in author `adaptive_mode` and publishes bounded world-frame
-  targets through the same EGO trajectory pipeline used by SMPF.
+  targets through EGO `free_space`; EGO supplies B-spline smoothing and
+  dynamics constraints but does not use scene obstacle mapping.
 - SPF and SMPF both use `gemini-3.5-flash` for visual decisions in the primary
   comparison. SMPF additionally uses `gpt-5.2` only for structured stage and
   guidepoint planning.
-- SPF bridge endpoint projection remains disabled; both methods now use EGO's
-  normal depth-map trajectory planning.
+- SPF bridge endpoint projection remains disabled. SMPF uses EGO `mapped`,
+  while SPF uses EGO `free_space` without depth/point-cloud occupancy fusion.
 - SPF bridge goal publication requires the shared explicit session gate plus
   fresh, connected, armed MAVROS state; its continuous loop uses the same gate
   and additionally requires an already armed hover. Disarmed tabletop checks

@@ -1,8 +1,14 @@
 <launch>
+	<arg name="enable_health_monitor" default="true"/>
+	<arg name="health_monitor_output_root" default="/home/uav/Desktop/uav_project/gameuav/runtime/vins_monitor"/>
 	<remap from="/tf" to="tf"/>
 	<remap from="/tf_static" to="tf_static"/>
 
 	<node name="vins_fusion" pkg="vins"  type="vins_node" output="screen" launch-prefix="$(find vins)/scripts/wait_for_vins_inputs.py" args="$(find vins)/../config/fast_drone_250.yaml"/>
+	<node if="$(arg enable_health_monitor)" name="vins_health_monitor" pkg="vins" type="vins_health_monitor.py" output="screen">
+		<param name="output_root" value="$(arg health_monitor_output_root)"/>
+		<param name="config_path" value="$(find vins)/../config/fast_drone_250.yaml"/>
+	</node>
 
 	<!-- <node name="loop_fusion" pkg="loop_fusion"  type="loop_fusion_node" args="$(find vins)/../config/fast_drone_250.yaml" output="screen"/> -->
 

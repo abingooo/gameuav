@@ -103,7 +103,8 @@ ActionPoint(right, forward, up)
 
 当前每步水平位移最多 `1.5 m`、垂直位移最多 `0.3 m`，目标高度限制在
 `0.4-1.5 m`。`goal_projection_enabled=false` 表示 SPF bridge 自身不投影端点；
-目标仍交给 EGO，EGO 使用实时深度 occupancy 生成和更新飞行轨迹。
+目标仍交给 EGO。SPF 实验使用 `egoctrl_nomap`，EGO 不融合实时深度
+occupancy，只负责 B 样条轨迹、速度和加速度约束。
 
 SPF TaskLoop 用现有实验阈值判定局部点到达：XY 误差 `<=0.25 m`、Z 误差
 `<=0.20 m`、yaw 误差 `<=10 deg`、三维线速度 `<=0.25 m/s`，四项连续满足
@@ -519,9 +520,10 @@ Search 单独保留为作者仿真来源，不加入真机总表。
 
 1. **相机不同。** SPF 保留 RGB1，SMPF 使用 RealSense 彩色图和深度。这是已明确保留的
    方法差异，因此结果不是 camera-controlled comparison，不能只归因于规划方法。
-2. **下游控制已统一。** SPF 和 SMPF 都把世界坐标目标交给 EGO，再由同一
-   control interface 和 PX4Ctrl 执行。两者仍不是纯规划器对比，因为上游感知、
-   目标生成和相机输入不同。
+2. **轨迹与低层控制统一，但 EGO 地图 profile 不同。** SPF 和 SMPF 都把世界坐标
+   目标交给 EGO，再由同一 control interface 和 PX4Ctrl 执行；SPF 使用
+   `free_space`，SMPF 使用 `mapped`。两者不是纯规划器对比，因为地图 profile、
+   上游感知、目标生成和相机输入均不同。
 3. **模型调用结构不同。** 两者视觉决策都用 `gemini-3.5-flash`，但 SMPF 静态任务还使用
    SAM 和 `gpt-5.2`。Follow 不调用规划 LLM。必须分别记录调用次数和延迟。
 4. **平台不是原论文数值复现。** 作者 SPF 在 DJI Tello EDU 上使用定时 RC 动作；本地把
@@ -533,8 +535,8 @@ Search 单独保留为作者仿真来源，不加入真机总表。
 
 | 模式 | 视觉 VLM | SAM/RGB-D | 规划 LLM | EGO | 显式任务状态 |
 | --- | --- | --- | --- | --- | --- |
-| SPF 六类 | 每轮生成 1 个动作；调用或解析失败时本轮无动作 | 否 | 否 | 是 | 只有通用局部动作循环 |
-| SMPF Navigate | 目标 + 障碍落地 | 是 | guidepoints | 是 | 单阶段执行 |
+| SPF 六类 | 每轮生成 1 个动作；调用或解析失败时本轮无动作 | 否 | 否 | `free_space` | 只有通用局部动作循环 |
+| SMPF Navigate | 目标 + 障碍落地 | 是 | guidepoints | `mapped` | 单阶段执行 |
 | SMPF Obstacle | 目标 + 障碍落地 | 是 | guidepoints | 是 | 与 Navigate 共用 |
 | SMPF Long-Horizon | 每阶段落地 | 是 | 阶段分解 + 每阶段 guidepoints | 是 | 阶段索引 + 已完成目标 ID |
 | SMPF Reasoning | VLM 推断满足需求的可见目标 | 是 | 只规划路线 | 是 | 与 Navigate 共用 |

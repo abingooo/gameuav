@@ -21,3 +21,5 @@ Render the `.mmd` files with any Mermaid renderer, or paste them into a Markdown
   camera/IMU mechanical layout changed, including fixed-candidate validation.
 - `10_spf_smpf_ego_profiles.md`: implementation and experiment plan for mapped
   EGO with SMPF and obstacle-free EGO trajectory generation with SPF.
+- `11_vins_online_calibration_2026-07-22.md`: rejected VINS calibration and the
+  2026-07-23 flight-divergence evidence that triggered rollback to 2026-07-21.

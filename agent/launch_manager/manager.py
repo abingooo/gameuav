@@ -86,6 +86,13 @@ class LaunchManager:
 
         for name, config in modules.items():
             self._validate_module(name, config)
+        for name, config in modules.items():
+            unknown = set(config.get("conflicts", [])) - set(modules)
+            if unknown:
+                raise ModuleConfigError(
+                    "module %s references unknown conflicts: %s"
+                    % (name, ", ".join(sorted(unknown)))
+                )
         return modules
 
     def _validate_module(self, name, config):
@@ -111,6 +118,11 @@ class LaunchManager:
         autostart = config.get("autostart", False)
         if not isinstance(autostart, bool):
             raise ModuleConfigError("module %s autostart must be boolean" % name)
+        conflicts = config.get("conflicts", [])
+        if not isinstance(conflicts, list) or any(
+            not isinstance(item, str) or not item or item == name for item in conflicts
+        ):
+            raise ModuleConfigError("module %s conflicts must be a list of other module names" % name)
 
         pre_start = config.get("pre_start")
         if pre_start is not None:
@@ -353,6 +365,17 @@ class LaunchManager:
                         % (self.ros_master_uri, external_run_id)
                     )
 
+            running_conflicts = []
+            for conflict_name in config.get("conflicts", []):
+                conflict = self._refresh_status(conflict_name)
+                if conflict is not None and conflict.status == "running":
+                    running_conflicts.append(conflict_name)
+            if running_conflicts:
+                raise ModuleRuntimeError(
+                    "cannot start %s while conflicting modules are running: %s; stop them first"
+                    % (name, ", ".join(sorted(running_conflicts)))
+                )
+
             command = self._build_command(name, config, args)
             self._ensure_roscore_for_launch(name, config)
             timestamp = time.strftime("%Y%m%d_%H%M%S")
@@ -511,6 +534,7 @@ class LaunchManager:
                 "type": config["type"],
                 "description": config.get("description", ""),
                 "allowed_args": config.get("allowed_args", {}),
+                "conflicts": config.get("conflicts", []),
             }
             for name, config in sorted(self.modules.items())
         }

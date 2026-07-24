@@ -29,7 +29,10 @@ Current integration policy:
 - The ROS bridge clamps the suggestion and publishes `/control/ego_position`.
 - The control interface forwards that target to `/planning/goal`; EGO owns
   trajectory generation and its output reaches px4ctrl through
-  `/control/ego_position_cmd` and `/control/position_cmd`, matching SMPF.
+  `/control/ego_position_cmd` and `/control/position_cmd`. The SPF startup
+  entry is `egoctrl_nomap`, which fixes EGO to `free_space`: B-spline and
+  dynamic constraints remain active, but depth/point-cloud obstacle mapping is
+  not subscribed or used. SMPF instead uses the mapped `egoctrl` entry.
 - While XY error is at most `0.25 m`, Z error at most `0.20 m`, yaw error at
   most `10 deg`, and three-dimensional speed at most `0.25 m/s` continuously
   for `0.5 s`, the target is settled. The task loop then requests the next SPF

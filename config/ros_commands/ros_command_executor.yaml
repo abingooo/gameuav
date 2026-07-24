@@ -492,7 +492,7 @@ commands:
     checks:
       require_ros_master: true
       list_timeout: 2.0
-      sample_timeout: 4.0
+      sample_timeout: 8.0
       required_nodes:
         - /mavros
         - /px4ctrl
@@ -508,6 +508,8 @@ commands:
         topic: /mavros/state
         require_connected: true
         require_armed: false
+        allowed_system_statuses:
+          - 3
       extended_state:
         name: mavros_extended_state
         topic: /mavros/extended_state
@@ -518,11 +520,6 @@ commands:
         estimate_topic: /vins_fusion/imu_propagate
         reference_topic: /mavros/local_position/pose
         max_roll_pitch_error_deg: 15.0
-      sample_topics:
-        - name: px4_local_pose
-          topic: /mavros/local_position/pose
-        - name: odom
-          topic: /vins_fusion/imu_propagate
     publish:
       topic: /px4ctrl/takeoff_land
       msg_type: quadrotor_msgs/TakeoffLand

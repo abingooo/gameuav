@@ -88,6 +88,8 @@
       "image_topic_current_default": "/rgb1/image_raw",
       "control_route": "/control/ego_position -> EGO -> /control/ego_position_cmd -> /control/position_cmd -> px4ctrl",
       "trajectory_planner": "EGO",
+      "ego_profile": "free_space",
+      "ego_scene_obstacle_mapping": false,
       "ego_occupancy_projection": false
     },
     "smpf_full": {
@@ -104,7 +106,9 @@
       "image_topic_current_default": "/camera/color/image_raw",
       "depth_topic": "/camera/aligned_depth_to_color/image_raw",
       "control_route": "/control/ego_position -> EGO -> /control/ego_position_cmd -> /control/position_cmd -> px4ctrl",
-      "trajectory_planner": "EGO"
+      "trajectory_planner": "EGO",
+      "ego_profile": "mapped",
+      "ego_scene_obstacle_mapping": true
     }
   },
   "camera_input_policy": {

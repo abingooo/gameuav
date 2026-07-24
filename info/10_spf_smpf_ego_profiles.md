@@ -1,4 +1,27 @@
-# SPF/SMPF 双 EGO 配置修改方案
+# SPF/SMPF 双 EGO Profile 实现与实验说明
+
+## 0. 当前实现状态
+
+UAV agent 提供两个开机启动入口，操作员在一次实验开始前人工二选一：
+
+| 前端模块 | 方法 | EGO profile | 场景障碍地图 |
+|---|---|---|---|
+| `egoctrl` | SMPF | `mapped` | 启用 |
+| `egoctrl_nomap` | SPF | `free_space` | 禁用 |
+
+两个模块在 agent 层互斥。一个正在运行时，另一个启动请求会被拒绝并提示先停止当前模块。不支持任务触发切换或飞行中热切换。
+`egoctrl_nomap` 只负责 free-space 飞控/规划栈；SPF Worker 和 Bridge 仍由 SPF
+调试台分别启动，使前端模块状态与实际 ROS 进程一一对应。
+
+对应 UAV 侧命令为：
+
+```bash
+# SMPF + mapped EGO
+python3 tools/agentctl.py start egoctrl --auth-token uavuavuavuav
+
+# SPF + free-space EGO
+python3 tools/agentctl.py start egoctrl_nomap --auth-token uavuavuavuav
+```
 
 ## 1. 目标
 
@@ -37,7 +60,7 @@ SPF  -> EGO free_space -> 忽略场景障碍，仅做轨迹生成和动力学约
 | SPF | `mapped` | 控制变量，量化 EGO 给 SPF 带来的增益 |
 | SMPF | `free_space` | 消融实验，量化 EGO 局部地图对 SMPF 的贡献 |
 
-## 3. 当前代码事实
+## 3. 代码实现
 
 当前 EGO 入口为：
 
@@ -45,7 +68,7 @@ SPF  -> EGO free_space -> 忽略场景障碍，仅做轨迹生成和动力学约
 - `ros_nodes/planning/ego_planner_stack/plan_manage/launch/single_run_in_exp.launch`
 - `ros_nodes/planning/ego_planner_stack/plan_manage/launch/advanced_param_exp.xml`
 
-当前深度输入固定为 `/camera/depth/image_rect_raw`，占据栅格由 `plan_env/src/grid_map.cpp` 建立，碰撞检查分布在 EGO 状态机、A* 和 B 样条优化器中。
+`mapped` 的深度输入为 `/camera/depth/image_rect_raw`，占据栅格由 `plan_env/src/grid_map.cpp` 建立，碰撞检查分布在 EGO 状态机、A* 和 B 样条优化器中。
 
 `GridMap::hasDepthObservation()` 当前只有定义，没有被规划状态机用作“允许开始规划”的门槛。初始膨胀占据栅格为空，因此没有深度帧时理论上仍可生成轨迹。但是，仅把深度 remap 到不存在的话题不是可靠实现，原因包括：
 
@@ -54,9 +77,9 @@ SPF  -> EGO free_space -> 忽略场景障碍，仅做轨迹生成和动力学约
 - 运行时切换可能保留之前建立的占据栅格。
 - 无法从日志可靠证明本次 SPF 实验确实没有使用障碍地图。
 
-因此需要增加显式 profile/参数，而不是依赖“断开深度话题”这种隐式行为。
+当前实现使用显式 profile，不依赖“把深度 remap 到不存在的话题”这种隐式行为。
 
-## 4. 推荐实现
+## 4. Profile 行为
 
 ### 4.1 新增统一 profile 参数
 
@@ -77,13 +100,13 @@ config/modules/uav_agent.yaml
   -> drone_0_ego_planner_node 私有参数
 ```
 
-EGO 内部建议使用明确的布尔参数：
+EGO 内部从 profile 派生并公开布尔参数：
 
 ```text
 grid_map/obstacle_mapping_enabled:=true|false
 ```
 
-profile 到内部参数的映射应由 launch 完成：
+profile 到内部参数的映射由 `GridMap::initMap()` 完成：
 
 ```text
 mapped     -> obstacle_mapping_enabled=true
@@ -125,11 +148,11 @@ free_space -> obstacle_mapping_enabled=false
 
 第 5 点很重要：`free_space` 是“忽略场景障碍”，不是关闭定位、范围和动力学约束。否则比较的不再只是局部避障能力。
 
-### 4.4 建议的代码边界
+### 4.4 代码边界
 
-优先在 `GridMap` 内统一实现禁用逻辑，避免在 A*、优化器和状态机的每一个碰撞调用点分别打补丁：
+禁用逻辑统一位于 `GridMap`，没有分别修改 A*、优化器和状态机的每一个碰撞调用点：
 
-- `GridMap::initMap()` 读取 `grid_map/obstacle_mapping_enabled`。
+- `GridMap::initMap()` 读取并校验 `grid_map/ego_profile`，再派生 `grid_map/obstacle_mapping_enabled`。
 - `false` 时不创建深度同步器和点云订阅器，仅保留里程计订阅。
 - `getOccupancy()` 和 `getInflateOccupancy()` 对地图范围内的位置返回无占据。
 - `getOdomDepthTimeout()` 在 `free_space` 下不报告深度超时。
@@ -151,12 +174,11 @@ free_space -> obstacle_mapping_enabled=false
 
 ### 5.2 切换必须重启 EGO 栈
 
-建议实验流程：
+开机人工选择流程：
 
 ```text
-停止当前任务
--> 停止 EGO/轨迹服务器
--> 使用目标 profile 重新启动 EGO
+确认两个 EgoCtrl 模块均未运行
+-> SMPF 实验点击 egoctrl，或 SPF 实验点击 egoctrl_nomap
 -> 检查唯一发布者和 profile 状态
 -> 再提交 SPF 或 SMPF 任务
 ```
@@ -165,14 +187,14 @@ free_space -> obstacle_mapping_enabled=false
 
 ### 5.3 方法和 profile 的默认绑定
 
-建议提供两个明确的 agent 启动入口或一个受约束参数：
+当前两个固定 agent 启动入口为：
 
 ```text
-SPF  默认 ego_profile=free_space
-SMPF 默认 ego_profile=mapped
+egoctrl_nomap -> SPF  + ego_profile=free_space
+egoctrl       -> SMPF + ego_profile=mapped
 ```
 
-控制实验允许人工覆盖，但每次覆盖必须写入实验日志。不能仅根据当前运行的是 SPF 还是 SMPF，在 EGO C++ 节点内部自动猜测 profile。
+这两个按钮不允许覆盖 `ego_profile`、`use_smpf` 或 `use_see_point_fly`。通用开发入口 `realflight` 和 `ego` 仍允许显式选择 profile，供消融实验使用。
 
 ## 6. 日志和实验元数据
 
@@ -228,15 +250,20 @@ SMPF 默认 ego_profile=mapped
 
 先用手持、仿真或不装桨条件验证输出轨迹。`free_space` 确认有效后，其真机行为就是可能直接撞向障碍，不能依靠 EGO 兜底。
 
-## 8. 建议实施顺序
+## 8. 实施与验证状态
 
-1. 增加 `GridMap` 显式 `obstacle_mapping_enabled` 参数和测试。
-2. 增加 `mapped/free_space` launch profile 传递与非法值检查。
-3. 将 agent 中现有 EGO 默认值保持为 `mapped`。
-4. 增加 SPF-free-space 和 SMPF-mapped 的明确启动入口。
-5. 给实验日志增加 profile、地图输入计数和占据体素计数。
-6. 完成无桨链路验证和 RViz 对照验证。
-7. 最后才进行隔离场地的低速真机测试。
+已完成：
+
+1. `GridMap` 显式 profile、非法值拒绝和 free-space 查询行为。
+2. `mapped/free_space` launch 参数逐层传递。
+3. `egoctrl` 与 `egoctrl_nomap` 固定绑定并在 agent 层互斥。
+4. C++ 编译和自动化结构测试。
+
+仍需在正式实验前完成：
+
+1. 无桨条件分别启动两个入口，核对订阅者、占据地图和轨迹输出。
+2. 给单次实验汇总补充实际运行 profile 和地图计数。
+3. 完成受控障碍对照，再进行隔离场地低速真机测试。
 
 ## 9. 完成判据
 

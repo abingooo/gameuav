@@ -53,7 +53,9 @@ struct MappingParameters {
   double resolution_, resolution_inv_;
   double obstacles_inflation_;
   string frame_id_;
+  string ego_profile_;
   int pose_type_;
+  bool obstacle_mapping_enabled_;
 
   /* camera parameters */
   double cx_, cy_, fx_, fy_;
@@ -182,7 +184,10 @@ public:
   inline double getResolution();
   Eigen::Vector3d getOrigin();
   int getVoxelNum();
-  bool getOdomDepthTimeout() { return md_.flag_depth_odom_timeout_; }
+  bool getOdomDepthTimeout() {
+    return mp_.obstacle_mapping_enabled_ && md_.flag_depth_odom_timeout_;
+  }
+  bool obstacleMappingEnabled() const { return mp_.obstacle_mapping_enabled_; }
 
   typedef std::shared_ptr<GridMap> Ptr;
 
@@ -261,6 +266,8 @@ inline void GridMap::boundIndex(Eigen::Vector3i& id) {
 }
 
 inline bool GridMap::isUnknown(const Eigen::Vector3i& id) {
+  if (!mp_.obstacle_mapping_enabled_) return false;
+
   Eigen::Vector3i id1 = id;
   boundIndex(id1);
   return md_.occupancy_buffer_[toAddress(id1)] < mp_.clamp_min_log_ - 1e-3;
@@ -273,6 +280,8 @@ inline bool GridMap::isUnknown(const Eigen::Vector3d& pos) {
 }
 
 inline bool GridMap::isKnownFree(const Eigen::Vector3i& id) {
+  if (!mp_.obstacle_mapping_enabled_) return isInMap(id);
+
   Eigen::Vector3i id1 = id;
   boundIndex(id1);
   int adr = toAddress(id1);
@@ -283,6 +292,8 @@ inline bool GridMap::isKnownFree(const Eigen::Vector3i& id) {
 }
 
 inline bool GridMap::isKnownOccupied(const Eigen::Vector3i& id) {
+  if (!mp_.obstacle_mapping_enabled_) return false;
+
   Eigen::Vector3i id1 = id;
   boundIndex(id1);
   int adr = toAddress(id1);
@@ -291,6 +302,7 @@ inline bool GridMap::isKnownOccupied(const Eigen::Vector3i& id) {
 }
 
 inline void GridMap::setOccupied(Eigen::Vector3d pos) {
+  if (!mp_.obstacle_mapping_enabled_) return;
   if (!isInMap(pos)) return;
 
   Eigen::Vector3i id;
@@ -301,6 +313,8 @@ inline void GridMap::setOccupied(Eigen::Vector3d pos) {
 }
 
 inline void GridMap::setOccupancy(Eigen::Vector3d pos, double occ) {
+  if (!mp_.obstacle_mapping_enabled_) return;
+
   if (occ != 1 && occ != 0) {
     cout << "occ value error!" << endl;
     return;
@@ -316,6 +330,7 @@ inline void GridMap::setOccupancy(Eigen::Vector3d pos, double occ) {
 
 inline int GridMap::getOccupancy(Eigen::Vector3d pos) {
   if (!isInMap(pos)) return -1;
+  if (!mp_.obstacle_mapping_enabled_) return 0;
 
   Eigen::Vector3i id;
   posToIndex(pos, id);
@@ -325,6 +340,7 @@ inline int GridMap::getOccupancy(Eigen::Vector3d pos) {
 
 inline int GridMap::getInflateOccupancy(Eigen::Vector3d pos) {
   if (!isInMap(pos)) return -1;
+  if (!mp_.obstacle_mapping_enabled_) return 0;
 
   Eigen::Vector3i id;
   posToIndex(pos, id);
@@ -336,6 +352,7 @@ inline int GridMap::getOccupancy(Eigen::Vector3i id) {
   if (id(0) < 0 || id(0) >= mp_.map_voxel_num_(0) || id(1) < 0 || id(1) >= mp_.map_voxel_num_(1) ||
       id(2) < 0 || id(2) >= mp_.map_voxel_num_(2))
     return -1;
+  if (!mp_.obstacle_mapping_enabled_) return 0;
 
   return md_.occupancy_buffer_[toAddress(id)] > mp_.min_occupancy_log_ ? 1 : 0;
 }

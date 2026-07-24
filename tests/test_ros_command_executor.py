@@ -315,7 +315,10 @@ class RosCommandExecutorTest(unittest.TestCase):
             self.assertFalse(result["ok"])
             self.assertFalse(result["executed"])
             self.assertFalse(result["checks_ok"])
-            self.assertEqual(result["detail"], "safety checks failed")
+            self.assertEqual(
+                result["detail"],
+                "safety checks failed: ros_master: ROS master is not reachable",
+            )
             self.assertEqual(result["checks"][0]["name"], "ros_master")
 
     def test_safe_command_dry_run_does_not_publish(self):
@@ -498,6 +501,43 @@ class RosCommandExecutorTest(unittest.TestCase):
             self.assertTrue(result["checks_ok"])
             self.assertFalse(result["executed"])
             self.assertEqual(result["detail"], "dry-run passed; command was not published")
+
+    def test_safe_command_reports_px4_flight_termination(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            executor = self.make_executor(Path(tmp))
+            executor.is_ros_master_reachable = lambda timeout=0.5: True
+            executor.safety_checker._ros_master_reachable = executor.is_ros_master_reachable
+            executor.commands["safe_takeoff"]["checks"].update(
+                {
+                    "required_nodes": [],
+                    "required_topics": ["/mavros/state"],
+                    "required_subscriber_topics": [],
+                    "state": {
+                        "topic": "/mavros/state",
+                        "require_connected": True,
+                        "require_armed": False,
+                        "allowed_system_statuses": [3],
+                    },
+                }
+            )
+
+            def fake_run(command, timeout=None):
+                if command[:2] == ["rostopic", "list"]:
+                    return "/mavros/state\n"
+                if command[:2] == ["rostopic", "info"]:
+                    return "Type: mavros_msgs/State\n\nPublishers:\n * /mavros\n"
+                if command[:4] == ["rostopic", "echo", "-n", "1"]:
+                    return "connected: true\narmed: false\nsystem_status: 8\nmode: POSCTL\n"
+                raise AssertionError("unexpected command: %r" % (command,))
+
+            executor.safety_checker._run = fake_run
+            result = executor.execute("safe_takeoff")
+
+            self.assertFalse(result["ok"])
+            self.assertIn(
+                "mavros_state.system_status: system_status=8 (FLIGHT_TERMINATION)",
+                result["detail"],
+            )
 
     def test_safe_command_skips_sampling_missing_required_topics(self):
         with tempfile.TemporaryDirectory() as tmp:

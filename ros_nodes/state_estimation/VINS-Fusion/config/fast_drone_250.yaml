@@ -23,7 +23,7 @@ image_width: 640
 image_height: 480
    
 
-# Fixed result from the 2026-07-21 sensor-only calibration after the camera mount changed.
+# Fixed result from the validated 2026-07-21 sensor-only calibration.
 estimate_extrinsic: 0
 body_T_cam0: !!opencv-matrix
    rows: 4

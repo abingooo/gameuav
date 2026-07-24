@@ -2,11 +2,13 @@
   <arg name="ego_launch" default="$(find ego_planner)/launch/single_run_in_exp.launch"/>
   <arg name="drone_id" default="0"/>
   <arg name="position_cmd_topic" default="/position_cmd"/>
+  <arg name="ego_profile" default="mapped"/>
 
   <group>
     <remap from="/position_cmd" to="$(arg position_cmd_topic)"/>
     <include file="$(arg ego_launch)">
       <arg name="drone_id" value="$(arg drone_id)"/>
+      <arg name="ego_profile" value="$(arg ego_profile)"/>
     </include>
   </group>
 </launch>

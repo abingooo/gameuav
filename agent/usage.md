@@ -652,6 +652,10 @@ SIGKILL
 
 重启 `gameuav-agent.service` 属于整个受管栈的重启，会依次停止 `egoctrl`、RGB1 和 `roscore`。只需重启单个算法或相机时，应通过 `agentctl.py restart <module>` 操作对应模块。
 
+SPF/SMPF 真机实验在开机后人工选择一个 EgoCtrl 启动入口：`egoctrl` 固定启动
+SMPF 和 `mapped` EGO；`egoctrl_nomap` 固定启动 SPF 和 `free_space` EGO。
+两个模块互斥，不支持任务触发切换或飞行中热切换。
+
 ## 12. TCP 协议格式
 
 TCP 上每个消息是一行 JSON，以 `\n` 结尾。
